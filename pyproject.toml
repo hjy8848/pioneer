@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pioneer"
+version = "0.0.1"
+description = "Independent reproduction of AWS environment-grounded verifiable task synthesis on tau2-bench Retail"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+# tau2 itself is installed editable from third_party/tau2-bench (pinned v1.0.1),
+# see scripts/setup_tau2.* and README.
+dependencies = [
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "llm: tests that call a real LLM (deselected by default)",
+]
+addopts = "-m 'not llm'"

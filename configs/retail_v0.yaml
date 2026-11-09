@@ -1,0 +1,34 @@
+# Synthesis config (filled in progressively by PLAN Steps 2-6).
+domain: retail
+seed: 0
+
+tau2:
+  tag: v1.0.1
+  commit: fc0055dc4e0a316c3f83133267fbd6faaa770992
+
+llm:
+  # One backbone for all synthesis roles, as in the blog (model is our choice; blog's is unnamed).
+  model: TODO           # e.g. anthropic/<model-id> via litellm
+  temperature: 0.7
+  cache_dir: data/cache/llm
+
+user_simulator:
+  model: TODO
+  temperature: 0.0
+
+evolution:
+  max_depth: 4
+  generations: 5
+  candidates_per_generation: 20
+  depth0_per_atomic_action: 3
+  stressors: [chain, multi_entity, policy_pushback, conditional, underspecified, reasoning]
+
+repair:
+  max_rounds: 3
+
+verifier:
+  e2e_reachability: false   # V9; costs 2 full conversations per task
+  e2e_trials: 2
+
+reward_basis_allowed: [[DB], [DB, COMMUNICATE]]
+target_verified_tasks: 50

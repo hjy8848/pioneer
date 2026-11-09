@@ -1,0 +1,19 @@
+# environments
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# pinned upstream checkout (fetched by scripts/setup_tau2.*)
+third_party/
+
+# secrets
+.env
+
+# generated artifacts (commit curated outputs explicitly with git add -f)
+data/cache/
+data/runs/
+data/holdout/
+data/knowledge/
+reports/tmp/

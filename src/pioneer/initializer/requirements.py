@@ -7,4 +7,5 @@ def require_completion_wait(task):
     instructions = task.user_scenario.instructions
     text = instructions.task_instructions if hasattr(instructions, "task_instructions") else ""
     if WAIT_FOR_COMPLETION.casefold() not in text.casefold():
-        raise ValueError("task_instructions must contain the required wait-for-completion sentence")
+        raise ValueError("task_instructions must contain the required wait-for-completion sentence, "
+                         f"verbatim: {WAIT_FOR_COMPLETION!r}")

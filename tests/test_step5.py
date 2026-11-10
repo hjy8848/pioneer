@@ -254,6 +254,15 @@ def test_pick_selects_the_single_extreme_and_rejects_ties_and_non_numbers():
     assert resolve(filtered, [ROWS], "b") == "a"  # operand 'b' must appear in the user text
 
 
+def test_communicate_binding_is_matched_ignoring_case_like_the_native_evaluator():
+    from helpers.verifier_cases import inform_candidate
+    task, meta, order, _ = inform_candidate()
+    task.evaluation_criteria.communicate_info = [order["status"].upper()]  # 'PENDING' vs the READ value 'pending'
+    report = engine().evaluate(task, meta)
+    assert report.passed, report.model_dump()  # E4 accepts the case difference and the native evaluator (E7) scores it 1
+    assert task.evaluation_criteria.communicate_info != [order["status"]]
+
+
 # -- pipeline control flow ------------------------------------------------------------------------
 class FakeClient:
     def __init__(self, **params):

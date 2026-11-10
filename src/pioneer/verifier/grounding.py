@@ -110,6 +110,7 @@ def derive(task, meta, env, tool_types):
     if len(communicate) != len(meta.communicate_bindings):
         raise ValueError("communicate_info needs one READ-derived binding per answer")
     for expected, expr in zip(communicate, meta.communicate_bindings):
-        if expr.get("source") != "read" or str(resolve(expr, outputs, text)) != expected:
+        # Case-insensitive, like the native evaluator that later matches the entry in the reply.
+        if expr.get("source") != "read" or str(resolve(expr, outputs, text)).casefold() != expected.casefold():
             raise ValueError("communicate_info is not computed from a READ tool output")
     return dict(user_id=identities[0], read_trace=trace, communicated=communicate)

@@ -38,6 +38,9 @@ argument_bindings,communicate_bindings. The caller fixes scenario_id/depth/outco
 Every argument needs a binding keyed 'action_index.argument_name'. Expressions:
 {source:'text',value:literal} must occur literally in user instructions (authentication
 values in known_info); {source:'read',step:0,path:''} references actual prior READ output.
+A free-text argument (a message or summary the reference action carries) is bound with a text
+expression whose value is a sentence copied verbatim from the user's own words, so write the
+argument as that sentence.
 read_steps=[{tool:READ_name,arguments:{param:expression}}]. A READ that returns a plain
 string is referenced with path=''; other READs return JSON objects.
 To select values from a READ output use {source:'read',step:N,path:'<dotted path>',
@@ -52,8 +55,14 @@ entities by user-facing attributes and bind them through READ provenance. Identi
 top-level collections may appear in user text.
 READs are not reference actions. Depth 0 WRITE tasks contain exactly the requested tool
 once. Inform tasks use actions=[]; each communicate_info string must have a READ binding.
-Include an entity-identifying value from the READ output in communicate_info so that
-different tasks do not repeat identical grounded outcomes. Transfer-outcome tasks contain
+Formats: reason_for_call, known_info, unknown_info and task_instructions are single strings,
+never objects. communicate_bindings is a list (not an object) with exactly one read expression
+per communicate_info entry, and each entry must equal, ignoring letter case, the text of the
+single value its expression resolves to: one fact per entry such as 'false' or '138.73', never
+a sentence or a 'Label: value' pair. The native evaluator looks for each entry in the agent's
+reply after lower-casing it and deleting its commas, so an entry must not contain a comma.
+Make one entry the value that identifies the entity asked about, so that different tasks do
+not repeat identical grounded outcomes. Transfer-outcome tasks contain
 exactly the requested transfer tool call; requested_capability must be a capability absent
 from the tool list whose underscore-separated words occur in the user text as ordinary words.
 Reference arguments must be satisfiable for the chosen entities under the supplied policy

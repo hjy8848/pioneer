@@ -8,8 +8,10 @@ tau2:
 
 llm:
   # One backbone for all synthesis roles, as in the blog (model is our choice; blog's is unnamed).
-  model: TODO           # e.g. anthropic/<model-id> via litellm
-  temperature: 0.7
+  model: openai/qwen3.7-max  # exact gateway ID uses OpenAI-compatible adapter
+  temperature: 0.0
+  api_base: http://10.130.138.46:8010/v1
+  max_tokens: 16000
   cache_dir: data/cache/llm
 
 user_simulator:

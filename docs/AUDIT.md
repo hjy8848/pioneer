@@ -60,7 +60,7 @@
 
 ### 工具放行、但 policy 禁止的情况（Verifier 必须用程序检查）
 
-1. `modify_pending_order_address` 和 `modify_pending_order_payment` 用 `_is_pending_order`（判断条件是 `"pending" in status`）。所以订单在 `pending (item modified)` 状态下仍能修改，而 policy 规定修改商品之后不能再修改。`tests/test_retail_env.py::test_policy_only_gap_is_not_enforced_by_tool` 复现了这一点。
+1. `modify_pending_order_address` 和 `modify_pending_order_payment` 用 `_is_pending_order`（判断条件是 `"pending" in status`），因此其状态检查会放行 `pending (item modified)`，而 policy 禁止商品修改后的进一步修改。地址修改可在真实 modify_items 后复现，见 `tests/test_retail_env.py::test_policy_only_gap_is_not_enforced_by_tool`。Step 2 补充：modify_items 会新增支付记录，因此随后 modify_payment 可能被“仅一条支付记录”检查拒绝；支付工具的状态缺口通过保留单条支付记录的沙盒探针单独复现，不能推断实际链一定放行。
 2. `exchange_delivered_order_items` 不检查新旧 item 是否相同（`modify_pending_order_items` 会检查），而 policy 要求换成不同的选项。
 3. `modify_user_address` 没有任何校验。
 4. 对话层规则：先认证、写操作前取得明确确认、一次对话只服务一个用户、只在超出能力范围时才转人工。这些都无法通过 DB 状态验证。

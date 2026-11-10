@@ -11,7 +11,7 @@
 
 ## 当前状态
 
-已完成 PLAN Step 0–1：
+已完成 PLAN Step 0–2：
 
 - 固定版本的 τ² 拉取脚本。
 - 六接口环境层：`get_metadata`、`init`、`run`、`state`、`query_data`、`reward`，以及扩展接口 `execute`。
@@ -19,7 +19,7 @@
 - 各阶段共享的数据契约。
 - 冒烟测试和隔离测试。
 
-Explorer、Evolver、Initializer、Verifier 都还没有实现，见 [docs/PLAN.md](docs/PLAN.md)。
+Explorer agent 已实现，通过工具读取源码、查询环境、自行提出成对探针，并提交带程序证据的 world model。Evolver、Initializer、Verifier 待后续步骤实现，见 [docs/PLAN.md](docs/PLAN.md)。
 
 ## 安装与测试
 
@@ -30,7 +30,10 @@ pip install -e third_party/tau2-bench
 pip install -e ".[dev]"
 pytest
 python scripts/build_holdout.py      # 输出 data/holdout/{users,signatures,task_users}.json
+python scripts/explore.py --config configs/explorer.yaml
 ```
+
+Explorer 的凭证通过进程环境变量 `LITELLM_API_KEY` 注入，共享模型、温度和 seed 来自 `configs/retail.yaml`。响应缓存位于 `data/cache/llm/`；相同配置可重放已缓存的探索。正式产物为 `data/knowledge/retail_world_model.json`，随代码提交，细节及用量见 [docs/EXPLORER.md](docs/EXPLORER.md)。
 
 `run(task, agent_cfg, user_cfg)` 直接接收自定义 τ² Task，不加载官方题库。
 `agent_cfg` 使用原生字段 `agent`（默认 `llm_agent`，可选 `llm_agent_gt`）、

@@ -4,9 +4,6 @@
 and compiles what each action needs, what it changes, and how it can fail.
 """
 
-from pathlib import Path
+from .build import build_knowledge
 
-
-def build_knowledge(out_path: Path, llm=None) -> dict:
-    """Produce data/knowledge/retail_knowledge.json. TODO(PLAN Step 2)."""
-    raise NotImplementedError("PLAN Step 2")
+__all__ = ["build_knowledge"]

@@ -52,7 +52,9 @@
 
 ---
 
-### Step 2：Explorer agent（构建 world model）⬜
+### Step 2：Explorer agent（构建 world model）✅
+
+完成记录（2026-11-10）：真实 qwen3.7-max agent 共 32 轮，经工具读取源码、查询环境、自行构造探针并提交 `data/knowledge/retail_world_model.json`。16 个动作、13 条状态探针规则（10 confirmed_by_tool / 2 policy_only / 1 contradicted 已丢弃）、7 条对话规则；41 条独立 sandbox 观察。有效来源响应 32 份，输入 1,874,781 token、输出 25,690 token，客户端估算 $3.456091。最终离线测试 31 项通过；详细运行和费用口径见 `docs/EXPLORER.md`。
 
 **博客原文：** "An explorer agent reads the tool code, the state schema, the seeded database, and the policy document, and compiles them into a structured description of what each action needs, what it changes, and how it can fail."
 

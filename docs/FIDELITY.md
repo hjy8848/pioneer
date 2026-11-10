@@ -15,10 +15,10 @@
 | 组件 | 博客原文 / 依据 | 本复现的做法 | 标注 |
 |---|---|---|---|
 | 阶段如何驱动 | "Each is driven by an agent, but no LLM output is trusted until the environment confirms it." | 四个阶段都是 LLM agent，通过工具接触环境；程序只负责提供工具和做环境检查 | `[BLOG]` |
-| LLM 骨干模型 | "a frontier model for all LLM roles (explorer, evolver, initializer, user simulator, verifier)" | 所有角色共用一个模型，写在 `configs/` 中 | `[BLOG]`；具体选哪个模型是 `[INDEPENDENT]`（博客没具名） |
+| LLM 骨干模型 | "a frontier model for all LLM roles (explorer, evolver, initializer, user simulator, verifier)" | 共享 `configs/retail.yaml`：网关 qwen3.7-max（LiteLLM 使用 openai/ 协议前缀）。Explorer 已实际运行；其他角色后续复用。初始 DeepSeek-V4-Flash 遇到限流，按用户要求切换 | `[BLOG]`；具体模型与切换为 `[INDEPENDENT]` |
 | Explorer 的输入 | 工具代码、state schema、初始数据库、policy | agent 用 `read_source`、`get_metadata`、`query_data`、`sandbox_execute` 读取 | `[BLOG]` |
-| Explorer 的输出 | 每个动作的 needs / changes / how it can fail | `{requires, changes, failure_modes}` 加上 policy 规则 | `[BLOG]`；JSON 格式是 `[INDEPENDENT]` |
-| Explorer 结果的环境确认 | "no LLM output is trusted until the environment confirms it" | 每条声明都用探针在全新环境中执行，按结果标注 confirmed / policy_only / contradicted | 原则 `[BLOG]`，探针做法 `[INDEPENDENT]` |
+| Explorer 的输出 | 每个动作的 needs / changes / how it can fail | 已产出 retail_world_model.json：16 个动作，requires/failure_modes 指向已接受探针的真实谓词；changes 保存原生输出和 DB hash 是否变化，避免把无关的模型文字当成被证明的事实 | `[BLOG]`；JSON 和证据规范为 `[INDEPENDENT]` |
+| Explorer 结果的环境确认 | "no LLM output is trusted until the environment confirms it" | 已跑 32 轮 tool-use agent，程序提供工具并验证 agent 提出的 case；10 confirmed_by_tool、2 policy_only；1 contradicted 未进入有效规则。模型不接收预制规则目录或固定探针，未确认的机制不得声称已验证 | 原则 `[BLOG]`，探针及提交协议 `[INDEPENDENT]` |
 | 出题起点 | "We start from every atomic action" | 每个原子动作生成 n 个深度 0 的任务 | `[BLOG]` |
 | stressor 类别 | 更多动作串联、更多实体、对 policy 讨价还价、条件请求、需求不明确、推理层难度 | `schemas.Stressor` 中的 6 类 | 类别 `[BLOG]`，细则 `[INDEPENDENT]` |
 | 全局追踪器 | 追踪已覆盖的内容，引导下一代去补未覆盖的结果，"including … say no" | 覆盖维度和调度规则 | 原则 `[BLOG]`，维度 `[INDEPENDENT]` |

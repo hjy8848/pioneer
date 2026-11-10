@@ -1,0 +1,3 @@
+# [BLOG] All synthesis roles share configs/retail.yaml's model.
+shared_config: retail.yaml
+max_turns: 40

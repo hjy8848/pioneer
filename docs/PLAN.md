@@ -86,6 +86,50 @@
 
 ---
 
+### Step 2.5：Step 2 review 跟进项 ⬜（在 Step 3 开始时一并完成）
+
+以下四项来自对 `344c1f1` 的 review。
+
+1. **包的默认入口不能是模板编译器（违反 AGENTS 规则 0）。**
+   - 现状：`pioneer.explorer.build_knowledge` 走的是 `rules.py` 里手写的 `rule_catalog()` 加预制探针，而且它是包对外导出的函数。
+   - 改法：
+     - `pioneer.explorer` 改为导出 `ExplorerAgent`，包的公开 API 只保留 agent 路径。
+     - `build_knowledge` 和 `rule_catalog` 移到 `tests/helpers/`，或者重命名为 `_legacy_build_knowledge`、`_legacy_rule_catalog`，并在 docstring 里写明「仅用于离线回归，禁止在流水线中调用」。
+     - 谓词检查函数 `check_rule` 是工具，可以继续留在 `src/`。
+   - 增加一个静态测试：`src/` 中除测试辅助代码外，任何地方都不得引用 `rule_catalog` 或 `_legacy_*`。
+2. **公开仓库中不能写内网地址。**
+   - 现状：`configs/retail.yaml` 里写死了 `api_base: http://10.130.138.46:8010/v1`。
+   - 改法：
+     - `api_base` 改为从环境变量读取（例如 `LITELLM_API_BASE`），和 key 的处理方式一样。
+     - 配置文件里只保留模型名；`.env.example` 中补上这个变量名。
+     - 缓存键可以继续包含 api_base，但记录到产物（world model 的 `llm_config` 等）中的值要脱敏，只保留主机名的哈希，或者写成 `"<env:LITELLM_API_BASE>"`。
+   - 注意：旧提交的历史里仍然有这个地址。如果需要彻底清除，由用户决定是否改写历史；Codex 不要擅自 force push。
+3. **world model 的 policy 覆盖检查** `[INDEPENDENT]`，要在 Step 5 之前完成。
+   - 现状：12 条状态规则几乎都是订单状态检查。下面这些工具会拦、policy 也写明了的约束都没有收进来：
+     - 礼品卡余额不足。
+     - 退款只能退到原支付方式或礼品卡。
+     - 改支付方式时只能有一条支付记录，且新方式必须与原来不同。
+     - 换货或改商品必须是同一商品，且新 item 有货。
+   - 这些违规在 E1 重放时会被发现，所以不影响入库判定；但 Evolver 的 `POLICY_PUSHBACK` 类题要依据 world model 来出，规则缺得越多，这类题就越少。
+   - 改法：
+     - 程序把 `policy.md` 按段落切开，检查每一段是否映射到至少一条状态规则或对话规则。
+     - 把未覆盖的段落作为「缺口」交给 Explorer agent，让它继续探索一轮；新规则同样要经过探针确认才能入库。
+     - 报告最终的覆盖率；仍未覆盖的段落要列出原因。
+     - 手写的 `_legacy_rule_catalog` 只能用来离线对比召回率，不能作为 agent 的输入。
+4. **world model 文件拆分。**
+   - 把 `agent_trace` 和 `llm_requests` 移到单独的 `data/knowledge/retail_explorer_trace.json`。
+   - 主文件只保留下游会用到的 actions、rules、atomic_actions、observations 等字段，方便 review 和 diff。
+
+**回报内容：**
+- 改动后包的公开 API。
+- 静态测试的结果。
+- api_base 的读取方式。
+- policy 段落覆盖率：补探索前和补探索后各多少。
+- 新增规则的 confirmed / policy_only 分布。
+- 新增的 LLM 花费。
+
+---
+
 ### Step 3：Verifier（环境证据 + verifier agent）⬜
 
 **博客原文：** "A task joins the dataset only once we can establish that its reference outcome is actually reachable and that it is the outcome the policy calls for." Verifier 是博客列出的 LLM 角色之一。

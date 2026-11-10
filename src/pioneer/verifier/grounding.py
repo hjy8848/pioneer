@@ -103,9 +103,20 @@ def derive(task, meta, env, tool_types):
         trace.append(dict(step=index, tool=tool, arguments=args))
     for i, action in enumerate(task.evaluation_criteria.actions or []):
         for key, actual in action.arguments.items():
-            expression = meta.argument_bindings.get(f"{i}.{key}")
-            if expression is None or resolve(expression, outputs, text) != actual:
-                raise ValueError(f"argument {i}.{key} is not uniquely derivable")
+            binding_key = f"{i}.{key}"
+            expression = meta.argument_bindings.get(binding_key)
+            if expression is None:
+                raise ValueError(
+                    f"Missing meta.argument_bindings['{binding_key}']. "
+                    f"Expected key format: '{binding_key}', not 'action_{i}.{key}'.")
+            try:
+                derived = resolve(expression, outputs, text)
+            except (ValueError, KeyError, IndexError, TypeError) as exc:
+                raise ValueError(f"Invalid meta.argument_bindings['{binding_key}']: {exc}") from exc
+            if derived != actual:
+                raise ValueError(f"Binding {binding_key}: derived {derived!r}, expected {actual!r}. "
+                                 "Actual action arguments must contain concrete values; "
+                                 "source expressions belong in meta.argument_bindings.")
     communicate = task.evaluation_criteria.communicate_info or []
     if len(communicate) != len(meta.communicate_bindings):
         raise ValueError("communicate_info needs one READ-derived binding per answer")

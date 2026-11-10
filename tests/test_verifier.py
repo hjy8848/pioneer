@@ -21,6 +21,24 @@ def engine(knowledge, **kwargs):
     return EvidenceEngine(knowledge, episode_runner=reference_episode, **kwargs)
 
 
+@pytest.mark.parametrize("problem, expected", [
+    ("missing", "Missing meta.argument_bindings['0.order_id']"),
+    ("invalid", "Invalid meta.argument_bindings['0.order_id']"),
+    ("mismatch", "Binding 0.order_id: derived"),
+])
+def test_grounding_reports_exact_binding_error(knowledge, problem, expected):
+    task, meta, *_ = candidate()
+    if problem == "missing":
+        meta.argument_bindings["action_0.order_id"] = meta.argument_bindings.pop("0.order_id")
+    elif problem == "invalid":
+        meta.argument_bindings["0.order_id"] = {"source": "read", "step": 99}
+    else:
+        task.evaluation_criteria.actions[0].arguments["order_id"] = "wrong-id"
+    report = engine(knowledge).evaluate(task, meta, run_e8=False)
+    failure = next(c for c in report.checks if c.name == "E4")
+    assert not failure.passed and expected in failure.details["error"]
+
+
 def test_valid_write_and_inform_use_mandatory_e8(knowledge):
     implementations = []
     def episode(task, implementation, seed):

@@ -1,5 +1,6 @@
 """[BLOG] Initializer constructs references through environment tools, not templates."""
 import json
+import re
 from tau2.data_model.tasks import Task
 from pioneer.env import RetailSynthEnv
 from pioneer.schemas import TaskMeta
@@ -16,7 +17,11 @@ TOOLS = [
     function("sandbox_execute", "Try a native tool against a fresh environment; cannot modify disk.",
              {"tool": {"type": "string"}, "arguments": {"type": "object"}}, ["tool", "arguments"]),
     function("submit_candidate", "Submit native tau2 Task and TaskMeta. Deterministic preflight returns failures; E8 remains mandatory and runs later.",
-             {"task": {"type": "object"}, "meta": {"type": "object"}}, ["task", "meta"]),
+             {"task": {"type": "object"}, "meta": {"type": "object", "properties": {
+                 "argument_bindings": {"type": "object", "description": "Keys are zero-based action index + '.' + argument name, e.g. 0.record_id.",
+                     "additionalProperties": {"type": "object", "properties": {
+                         "source": {"type": "string", "enum": ["text", "read"]}}, "required": ["source"]}}},
+                 "required": ["argument_bindings"]}}, ["task", "meta"]),
 ]
 
 # [BLOG] "The recipe never needs to know what your domain is." This prompt holds
@@ -74,6 +79,22 @@ users and (action, entity) pairs that preflight rejects.
 Include the exact required completion-wait sentence in task_instructions. The user
 must confirm the operation but NOT end at confirmation; wait for actual completion.
 Inspect environment, trial the reference, submit. Repair reported preflight failures.
+
+Protocol-only JSON example (invented identifiers/tool; replace with real environment
+tools and values, never reuse this example as a task):
+{"task":{"id":"example","user_scenario":{"instructions":{"domain":"{domain}",
+"reason_for_call":"Update record R123.","known_info":"My email is alex@example.com. Record R123.",
+"unknown_info":"","task_instructions":"Set record R123 to active. Wait until the agent confirms completion of your request before ending the conversation."}},
+"evaluation_criteria":{"actions":[{"action_id":"a0","name":"update_record",
+"arguments":{"record_id":"R123","status":"active"}}],"communicate_info":[],"reward_basis":["DB"]}},
+"meta":{"scenario_id":"example","depth":0,"expected_outcome":"complete",
+"structure_signature":"","instance_signature":"","num_write_actions":1,
+"read_steps":[],"argument_bindings":{"0.record_id":{"source":"text","value":"R123"},
+"0.status":{"source":"text","value":"active"}},"communicate_bindings":[]}}
+The key is "0.record_id", NOT "action_0.record_id": the first action index is 0.
+task.evaluation_criteria.actions[].arguments contains concrete tool values only.
+Expressions such as {"source":"read","step":0,"path":"record_id"} belong only in
+meta.argument_bindings (or read_steps arguments); never put them in actual action arguments.
 """
 
 
@@ -107,6 +128,17 @@ value. Ties are rejected, so choose entities where the extreme is unique.
 def build_system(metadata, depth=0):
     text = SYSTEM.replace("{domain}", metadata["domain"])
     return text + DEEPER if depth else text
+
+
+def normalize_binding_keys(bindings):
+    """Normalize the mechanical action_N prefix without inventing source evidence."""
+    normalized = {}
+    for key, expression in bindings.items():
+        canonical = re.sub(r"^action_(\d+)\.", r"\1.", key)
+        if canonical in normalized and normalized[canonical] != expression:
+            raise ValueError(f"Conflicting meta.argument_bindings entries for '{canonical}'")
+        normalized[canonical] = expression
+    return normalized
 
 
 class InitializerAgent:
@@ -171,6 +203,7 @@ class InitializerAgent:
                             raise ValueError("query the environment before submitting")
                         task = Task.model_validate(args["task"])
                         meta = TaskMeta.model_validate(args["meta"])
+                        meta.argument_bindings = normalize_binding_keys(meta.argument_bindings)
                         task.id, meta.scenario_id = candidate_id, scenario.scenario_id
                         meta.depth, meta.expected_outcome = scenario.depth, scenario.expected_outcome
                         meta.stressors, meta.parent_id = scenario.stressors, scenario.parent_id

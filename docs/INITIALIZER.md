@@ -14,6 +14,8 @@ python scripts/initialize_batch.py --out data/runs/depth0 --workers 4 --n 3
 
 ## 必含与禁止项
 
+参数协议：参考动作的 arguments 保存实际工具值，来源表达式仅放在 meta 的绑定字段。Prompt 提供独立于业务规则的完整 JSON 示例，submit_candidate 声明绑定表达式的结构。Initializer 仅把 action_N.argument 规范化为 N.argument；冲突值拒绝，不推断或补造缺失证据。E4 分别报告缺失键、无效表达式和解析值不匹配，错误包含具体字段。
+
 - user_scenario.instructions 为原生结构化用户指令；具体身份来自非 holdout 实体。
 - task_instructions 必须包含 requirements.WAIT_FOR_COMPLETION 的原句；不能在 yes 确认时就结束。
 - actions 明确为列表；只读任务为 []。深度 0 只包含指定 WRITE 或 transfer 原子动作。

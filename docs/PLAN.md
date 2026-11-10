@@ -154,7 +154,7 @@
   - 有写动作或 transfer 的任务：用 `llm_agent_gt` + user simulator 跑 k 次（默认 k=2），至少一次 reward=1。
   - `actions=[]` 的任务：`llm_agent_gt` 无法运行（见 AUDIT §5），改用 `llm_agent` + user simulator 跑 k 次，至少一次 reward=1。
   - 这里的 reward 是环境 reward。具体做法为 `[INDEPENDENT]`。
-- **E9 去重与隔离**（附加约束）：结构签名和实例签名不重复；不涉及 holdout 用户；与官方任务签名无重叠。
+- **E9 去重与隔离**（附加约束）：实例签名不重复；不涉及 holdout 用户；与官方任务签名无重叠。结构签名只用于统计，不作为拒绝条件，原因见 Step 3.5 第 1 项（这句原本写成「结构签名和实例签名都不重复」，是 PLAN 的错误）。
 
 **3b. Verifier agent** `[BLOG 角色 / INDEPENDENT 做法]`：
 - 输入：候选任务和 world model。
@@ -168,6 +168,34 @@
 - **补强静态隔离检查**（Step 2.5 review）：现有检查只匹配 `rule_catalog` 和 `_legacy_*` 这两种名字，但 helpers 模块名是 `legacy_build`、`legacy_rules`，而且 `import tests.helpers...` 这种写法完全检查不到。新增一条：`src/` 下任何文件都不得 `import tests` 或 `from tests... import`，`ast.Import` 和 `ast.ImportFrom` 都要检查。
 
 **回报内容：** 每个失败码的测试结果；E8 的单题花费。
+
+---
+
+### Step 3.5：Step 3 review 跟进项 ⬜（在 Step 4 开始时一并完成）
+
+以下几项来自对 `0053e67` 的 review。
+
+1. **E9 不能因为结构签名重复而拒绝任务。必须修改。**
+   - 原因：结构签名只看「写动作序列 + stressor + 结果类型」，同一种结构本来就会有很多道不同的题。例如深度 0 每个原子动作要出 3 题，这 3 题的结构签名完全相同。如果按结构去重，每个原子动作只能入库 1 题，整个题库的上限会卡在「不同结构的数量」（大约几十个），不可能达到约 600 个。
+   - 这条规则的错误来自 PLAN 原文，不是 Codex 的实现问题。
+   - 改法：
+     - 在 `EvidenceEngine` 中，`duplicate` 只由「实例签名重复」或「与官方任务签名重叠」决定。
+     - `seen_structure` 改为只用于统计，或者直接删除这个参数。
+     - 修改或补充测试：两道结构相同、实例不同的任务都应该能通过 E9。
+2. **实例签名不能包含用户剧本的原文。**
+   - 原因：现在的实例签名里有 `user_scenario` 全文，同一道题换个说法就会算作新实例，近似重复的题能反复入库。
+   - 改法：实例签名改为由「参考 actions（名称、参数）+ initial_state + stressor 集合 + expected_outcome + communicate_info」计算，不包含自然语言措辞。
+   - 补一个测试：同一组参考结果配两种不同措辞，第二道题应该被判为 DUPLICATE。
+3. **防止用户模拟器过早结束对话**（写给 Step 4 的 Initializer）。
+   - 现象：Step 3 第一个真实样例中，用户模拟器在说 yes 时就发出了 STOP，写操作还没执行，两次对话都得 0 分。Verifier 的拒绝是正确的，但以后这种情况会反复出现。
+   - 改法：
+     - Initializer 写的 `task_instructions` 必须明确要求用户：等 agent 告知操作已完成后再结束对话。把这一点加入 Initializer 的「必须包含」检查清单。
+     - 可选：ART 官方示例（`examples/strands_taubench_agent/constants.py`）在 user system prompt 后面附加了一份 "Verification Checklist"，用来稳定用户模拟器的行为。如果采用，标为 `[OFFICIAL]`（ART），并登记到 FIDELITY；用户模拟器的 prompt 要通过 bridge 注入，不能修改 τ² 源码。
+4. **花费跟踪**（不需要改代码，但每一步都要回报）。
+   - Step 3 实测：每道入库任务的验证约需 $0.35（E8 约 $0.23–0.27，Verifier agent 约 $0.12）。按被拒绝和返工候选为 2–3 倍估算，每个领域 600 题约需 $400–600，四个领域约 $2,000，还不包括生成本身的花费。
+   - 从 Step 4 起，每次运行都要在回报中写出：每道入库任务的平均花费，包括生成、验证和返工的拆分；以及按当前速率推算到 600 题的总花费。
+
+**回报内容：** E9 修改后的测试结果；新实例签名的定义；Initializer 的「必须包含」清单中是否已加入「等待完成后再结束对话」；是否采用了 ART 的 checklist。
 
 ---
 

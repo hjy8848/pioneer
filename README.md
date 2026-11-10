@@ -7,10 +7,11 @@
 
 ## 当前状态
 
-只完成了基础代码（PLAN Step 0）：
+已完成 PLAN Step 0–1：
 
 - 固定版本的 τ² 拉取脚本。
-- 六接口环境层的一部分：`get_metadata`、`init`、`state`、`query_data`，以及扩展接口 `execute`。
+- 六接口环境层：`get_metadata`、`init`、`run`、`state`、`query_data`、`reward`，以及扩展接口 `execute`。
+- 官方 base 114 题的隔离清单提取（53 个用户）和写动作签名。
 - 各阶段共享的数据契约。
 - 冒烟测试和隔离测试。
 
@@ -24,7 +25,16 @@ python3.12 -m venv .venv && . .venv/bin/activate
 pip install -e third_party/tau2-bench
 pip install -e ".[dev]"
 pytest
+python scripts/build_holdout.py      # 输出 data/holdout/{users,signatures,task_users}.json
 ```
+
+`run(task, agent_cfg, user_cfg)` 直接接收自定义 τ² Task，不加载官方题库。
+`agent_cfg` 使用原生字段 `agent`（默认 `llm_agent`，可选 `llm_agent_gt`）、
+`llm_agent`、`llm_args_agent`、`seed`、`max_steps`、`max_errors`；
+`user_cfg` 使用 `llm_user`、`llm_args_user`，user 固定为 `user_simulator`。
+`reward()` 返回原生 `RewardInfo`；任务必须明确提供 `actions`（无写动作时为 `[]`），
+`reward_basis` 只接受 `[DB]` 或 `[DB, COMMUNICATE]`。
+`llm_agent_gt` 的原生实现不支持空动作任务，详见 AUDIT §5。
 
 ## 目录结构
 

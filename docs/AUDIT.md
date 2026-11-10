@@ -92,12 +92,63 @@
 - CLI 只有 `--task-set-name`（只能选已注册的任务集）、`--task-split-name` 和 `--task-ids`，**没有加载任意任务文件的参数**。
 - 两种做法：
   1. 在自己的入口里调用 `tau2.registry.registry.register_tasks(loader, "retail_synth")`，然后走 runner。
-  2. 直接调用 `tau2.runner` 的 `run_single_task(TextRunConfig(...), task)`。这一条待核实，见 §5。
+  2. 直接调用 `tau2.runner` 的 `run_single_task(TextRunConfig(...), task)`。已核实并通过离线集成测试，见 §5。
 - 数据目录可以用 `TAU2_DATA_DIR` 指定。
 
-## 5. 待核实（PLAN Step 0 / Step 1）
+## 5. Step 1 核实结果（2026-11-10）
 
-- v1.0.1 与 v2.0.0 在 `retail/` 目录（tools.py、data_model.py、db.json、policy.md）上的 diff。
-- `tau2.runner.run_single_task` 和 `TextRunConfig` 的完整签名。
-- `LLMGTAgent` 怎样把 expected actions 交给模型，以及它在 Retail 上是否可靠。
-- 官方 114 题涉及的用户数。初步估计约 52 个，需由 `scripts/build_holdout.py` 精确计算。
+### Retail 版本差异 `[OFFICIAL]`
+
+对比固定 v1.0.1 与 v2.0.0（`989d3285ae669e49503324bdb9981bf14fccedeb`）：
+
+```bash
+git -C third_party/tau2-bench fetch --depth 1 origin tag v2.0.0
+git -C third_party/tau2-bench diff v1.0.1 v2.0.0 -- src/tau2/domains/retail data/tau2/domains/retail/db.json data/tau2/domains/retail/policy.md
+```
+
+- `tools.py`：增加 regional_settings 和区域化工具描述；身份查询改用 `fold_for_match`，并在多匹配时抛出 `User lookup is ambiguous`。
+- `environment.py`：增加 policy 和 regional_settings 参数；传入 DB 时先深拷贝。
+- `data_model.py`、`db.json`、`policy.md` 无差异。整个 Retail 源码目录只有上述两个文件变化（60 行新增、9 行删除），不能据此推断两个版本整体评测可比。
+- 本项目继续使用 v1.0.1，没有修改 τ² 受版本控制的源码。
+
+### runner 和评分 `[OFFICIAL]`
+
+`run_single_task` 定义于 `src/tau2/runner/batch.py:341`，从 `tau2.runner` 导出；`TextRunConfig` 定义于 `src/tau2/data_model/simulation.py:514`。完整运行时签名附后。
+
+`run_single_task(config, task, ...)` 接受 Task 对象，经 `build_orchestrator` 构造 agent、user 和新环境，然后运行并附加 `reward_info`；无需注册合成任务集，也不调用官方任务加载函数。
+
+`[INDEPENDENT]` 包装层固定 domain=retail、user=user_simulator，开放模型、LLM 参数、seed、步数和错误次数配置；不接受任务集选择参数。`run()` 返回轨迹，`state()` 仍表示显式 `init()/execute()` 的环境；原生 runner 使用它自己创建的环境。
+
+`reward()` 委托 `evaluate_simulation(simulation, task, EvaluationType.ALL, solo_mode=False, domain="retail")`，返回 RewardInfo。包装层在运行和评分前拒绝缺失 actions、`actions=None` 和不允许的 reward_basis，避免跳过 DB 检查或调用 NL evaluator。
+
+### Ground-truth agent 的能力与限制 `[OFFICIAL]`
+
+`src/tau2/agent/llm_agent.py:166` 的 LLMGTAgent 将参考动作逐条写为 `[Step n]` resolution steps，默认 `provide_function_args=True`，包括工具名和参数，并放入 system prompt；这只是提示模型执行，不保证正确。
+
+`check_valid_task` 要求至少一条参考动作。`actions=[]` 的只读或拒绝任务会在构造时触发断言，不能用该 agent 做全部 V9 检查。未来 Step 3 的 V9 需要显式处理这个限制，不能以空动作直接宣称已验证。
+
+本次两个原生 agent 都通过 mock LLM 完成一条取消订单对话，并获真实环境 reward=1。只验证接线与重放，不代表真实模型在 Retail 上的成功率；尚未做付费 LLM 可靠性实验。
+
+### holdout 用户与任务签名 `[INDEPENDENT]`
+
+执行 `python scripts/build_holdout.py`：`base_tasks=114 holdout_users=53 signatures=114`。
+
+- 从 actions 参数里的 user_id、email、姓名+邮编，以及真实 order_id 反查身份；同时检查 known_info 的 user_id、邮箱和姓名+邮编。只读取 base split，所有 114 题均解析成功。
+- 官方 46/47 等任务含故意输错的订单号，不能将不存在的订单当作身份；无其他可解析身份时脚本会报错。57 题没有动作，但 known_info 直接给出了 user_id，已覆盖。
+- `data/holdout/users.json` 为 53 个用户 ID 的排序列表；`signatures.json` 为逐题 `{task_id, user_id, write_actions}`，其中 write_actions 按原顺序保留重复 WRITE 工具，READ 和 GENERIC 不纳入写动作序列。
+- `task_users.json` 保留逐题解析结果供追溯。这些派生产物按现有 .gitignore 留在本地，可用同一命令重建。
+
+### 验证记录 `[INDEPENDENT]`
+
+Python 3.12.7；`python -m pytest -q`：**15 passed, 1 warning**（上游 audioop 弃用警告）。
+包含：相同写动作 reward=1、省略写动作 reward=0、空动作保持原状态 reward=1、空动作任务出现额外写操作 reward=0；两个 agent 的原生 runner 离线对话、身份提取分支和评测隔离测试。
+
+安装脚本补取 `/data/tau2/user_simulator/`，解决原生 user simulator 缺少 simulation_guidelines.md 的问题。pytest 使用本地 LiteLLM 价格表，模型生成函数全部 mock，不调用模型 API。
+
+### 固定版本完整运行时签名 `[OFFICIAL]`
+
+```python
+run_single_task(config: Union[tau2.data_model.simulation.TextRunConfig, tau2.data_model.simulation.VoiceRunConfig], task: tau2.data_model.tasks.Task, *, seed: Optional[int] = None, evaluation_type: tau2.evaluator.evaluator.EvaluationType = <EvaluationType.ALL: 'all'>, save_dir: Optional[pathlib.Path] = None, user_voice_settings: Optional[tau2.data_model.voice.VoiceSettings] = None, user_persona_config: Optional[tau2.data_model.persona.PersonaConfig] = None, verbose_logs: bool = False, audio_debug: bool = False, audio_taps: bool = False, auto_review: bool = False, review_mode: str = 'full', review_model: Optional[str] = None, hallucination_feedback: Optional[str] = None) -> tau2.data_model.simulation.SimulationRun
+
+TextRunConfig(*, domain: str = 'airline', task_set_name: Optional[str] = None, task_split_name: Optional[str] = 'base', task_ids: Optional[list[str]] = None, num_tasks: Optional[int] = None, llm_user: str = 'gpt-4.1-2025-04-14', llm_args_user: dict = <factory>, num_trials: int = 1, max_errors: int = 10, timeout: Optional[float] = None, save_to: Optional[str] = None, max_concurrency: int = 3, seed: Optional[int] = 300, log_level: Optional[str] = 'ERROR', verbose_logs: bool = False, max_retries: int = 3, retry_delay: float = 1.0, auto_resume: bool = False, auto_review: bool = False, review_mode: Literal['full', 'user'] = 'full', review_model: str = 'claude-opus-4-5', hallucination_retries: int = 3, is_remote: bool = False, retrieval_config: Optional[str] = None, retrieval_config_kwargs: Optional[dict] = None, agent: str = 'llm_agent', llm_agent: str = 'gpt-4.1-2025-04-14', llm_args_agent: dict = <factory>, user: str = 'user_simulator', max_steps: int = 200, enforce_communication_protocol: bool = False, text_streaming_config: Optional[dict] = None) -> None
+```

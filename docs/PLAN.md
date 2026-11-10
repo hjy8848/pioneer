@@ -22,7 +22,9 @@
 
 ---
 
-## Step 1：补全六接口 + 评测隔离 ⬜
+## Step 1：补全六接口 + 评测隔离 ✅
+
+完成记录（2026-11-10）：AUDIT §5 已核实；114 题提取 53 个 holdout 用户、114 条任务签名；`pytest -q`：15 passed，1 条上游 audioop 弃用警告。原生 runner 的两个 agent 均通过 mock LLM 对话和真实环境评分测试。
 
 1. **核实 AUDIT §5 的各项，结论写回 AUDIT.md。** 其中 v1.0.1 与 v2.0.0 的 retail diff 可以这样看：
    `git -C third_party/tau2-bench fetch --depth 1 origin tag v2.0.0`，再对 `src/tau2/domains/retail` 和 `data/tau2/domains/retail/{db.json,policy.md}` 做 diff。

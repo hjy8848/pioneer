@@ -242,20 +242,45 @@ class RetailSynthEnv:
     # run / reward  -- implemented in PLAN Step 1
     # ------------------------------------------------------------------ #
     def run(self, task: Any, agent_cfg: dict, user_cfg: dict) -> Any:
-        """[BLOG] Orchestrate user simulator <-> task agent on ``task``; return the trajectory.
+        """[BLOG] Return a native SimulationRun for a directly supplied Task.
 
-        TODO(PLAN Step 1): delegate to tau2's native runner
-        (tau2.runner: run_single_task / TextRunConfig) with agent "llm_agent"
-        (or "llm_agent_gt" for the end-to-end reachability check) and
-        "user_simulator". Return the tau2 SimulationRun.
+        [INDEPENDENT] agent_cfg accepts agent, llm_agent, llm_args_agent,
+        seed, max_steps and max_errors (native TextRunConfig names).
+        user_cfg accepts llm_user and llm_args_user. No task loader is used.
         """
-        raise NotImplementedError("PLAN Step 1")
+        from tau2.data_model.simulation import TextRunConfig
+        from tau2.runner import run_single_task
+
+        self._validate_criteria(task)
+        agent_keys = {"agent", "llm_agent", "llm_args_agent", "seed", "max_steps", "max_errors"}
+        user_keys = {"llm_user", "llm_args_user"}
+        if set(agent_cfg) - agent_keys or set(user_cfg) - user_keys:
+            raise ValueError("unsupported run configuration key")
+        if agent_cfg.get("agent", "llm_agent") not in {"llm_agent", "llm_agent_gt"}:
+            raise ValueError("agent must be llm_agent or llm_agent_gt")
+        config = TextRunConfig(domain=self.domain, user="user_simulator", **agent_cfg, **user_cfg)
+        # [OFFICIAL] run_single_task builds fresh native environments from task.
+        return run_single_task(config, task, seed=config.seed)
+
+    @staticmethod
+    def _validate_criteria(task: Any) -> None:
+        """[INDEPENDENT] Enforce synthesis reward contracts before native evaluation."""
+        from tau2.data_model.tasks import RewardType
+
+        criteria = task.evaluation_criteria
+        if criteria is None or criteria.actions is None:
+            raise ValueError("synthesized tasks require explicit actions (use [] for no writes)")
+        if criteria.reward_basis not in ([RewardType.DB], [RewardType.DB, RewardType.COMMUNICATE]):
+            raise ValueError("reward_basis must be [DB] or [DB, COMMUNICATE]")
 
     def reward(self, task: Any, simulation: Any) -> Any:
         """[OFFICIAL] Score a finished trajectory with tau2's own evaluator.
 
-        TODO(PLAN Step 1): tau2.evaluator.evaluator.evaluate_simulation(
-        simulation, task, EvaluationType.ALL, solo_mode=False, domain="retail").
         Synthesised tasks must use reward_basis [DB] or [DB, COMMUNICATE] only.
         """
-        raise NotImplementedError("PLAN Step 1")
+        from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
+
+        self._validate_criteria(task)
+        return evaluate_simulation(
+            simulation, task, EvaluationType.ALL, solo_mode=False, domain=self.domain
+        )

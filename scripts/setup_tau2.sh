@@ -12,7 +12,7 @@ if [ ! -d "$DEST/.git" ]; then
   git clone --filter=blob:none --no-checkout --depth 1 --branch "$TAG" \
     https://github.com/sierra-research/tau2-bench.git "$DEST"
 fi
-git -C "$DEST" sparse-checkout set --no-cone /pyproject.toml /README.md /LICENSE /src/ /data/tau2/domains/
+git -C "$DEST" sparse-checkout set --no-cone /pyproject.toml /README.md /LICENSE /src/ /data/tau2/domains/ /data/tau2/user_simulator/
 git -C "$DEST" checkout --quiet
 HEAD="$(git -C "$DEST" rev-parse HEAD)"
 [ "$HEAD" = "$COMMIT" ] || { echo "tau2-bench HEAD $HEAD != pinned $COMMIT" >&2; exit 1; }

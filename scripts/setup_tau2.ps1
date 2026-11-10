@@ -11,7 +11,7 @@ if (-not (Test-Path (Join-Path $Dest ".git"))) {
     New-Item -ItemType Directory -Force (Split-Path $Dest) | Out-Null
     git clone --filter=blob:none --no-checkout --depth 1 --branch $Tag https://github.com/sierra-research/tau2-bench.git $Dest
 }
-git -C $Dest sparse-checkout set --no-cone /pyproject.toml /README.md /LICENSE /src/ /data/tau2/domains/
+git -C $Dest sparse-checkout set --no-cone /pyproject.toml /README.md /LICENSE /src/ /data/tau2/domains/ /data/tau2/user_simulator/
 git -C $Dest checkout --quiet
 $Head = (git -C $Dest rev-parse HEAD).Trim()
 if ($Head -ne $Commit) { throw "tau2-bench HEAD $Head != pinned $Commit" }

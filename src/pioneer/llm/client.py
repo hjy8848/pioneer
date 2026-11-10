@@ -6,8 +6,10 @@ from pathlib import Path
 
 
 class LiteLLMClient:
-    def __init__(self, model, temperature, seed, cache_dir, *, api_base=None, api_key=None, max_tokens=16000):
+    def __init__(self, model, temperature, seed, cache_dir, *, api_base=None, api_key=None, max_tokens=16000,
+                 timeout=120):
         self.params = dict(model=model, temperature=temperature, seed=seed, max_tokens=max_tokens)
+        self.timeout = timeout  # per-request seconds; deliberately not part of the cache key
         self.cache_dir = Path(cache_dir)
         self.api_base, self.api_key = api_base, api_key
         self.records = []
@@ -26,7 +28,7 @@ class LiteLLMClient:
             return record["message"] if "message" in record else {"content": record["raw_response"]}
         import litellm
         response = litellm.completion(**request, api_base=self.api_base, api_key=self.api_key,
-                                      timeout=120, num_retries=0)
+                                      timeout=self.timeout, num_retries=0)
         self.usage["calls"] += 1
         usage = response.usage
         self.usage["prompt_tokens"] += usage.prompt_tokens or 0

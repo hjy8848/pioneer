@@ -293,7 +293,13 @@
 
 ---
 
-### Step 5：Evolver agent + 全局覆盖追踪器 ⬜
+### Step 5：Evolver agent + 全局覆盖追踪器 🔶
+
+完成记录：代码和离线测试已完成（113 项通过），**还没有用真实模型出过深度 1–4 的题**，因为父题来自深度 0，要等 Step 4.5 第 4 项补齐。
+- `evolver/tracker.py`（追踪器，纯程序）、`evolver/agent.py`（Evolver agent，带按压力类型的形状检查）、`evolver/pool.py`、`pipeline.py`（生成、判卷、返工）、`scripts/evolve.py`（逐代驱动，可断点续跑，`--plan-only` 只看计划不花钱）。
+- Initializer 放开了深度 0 的限制，按 `expected_outcome` 和意图列表检查参考动作（`initializer/contract.py`），深度 0 的 prompt 和检查保持字节不变。
+- Verifier：E6 增加条件请求证据（新失败码 `CONDITION_INVALID`）；读取表达式增加 `pick={min|max: 字段}`，用于"最便宜的那件"这类比较。
+- 运行方式见 `scripts/evolve.py` 顶部的说明。
 
 **博客原文：** "Each generation takes existing scenarios and applies evolution stressors to produce harder descendants: more actions chained together, more entities involved, and more of the interaction-level and reasoning-level difficulty a real user brings, such as pushing back on policy, asking for something conditional, or under-specifying a request. A global tracker watches what has already been covered and steers each generation toward what hasn't, including outcomes where the correct behavior is to say no."
 

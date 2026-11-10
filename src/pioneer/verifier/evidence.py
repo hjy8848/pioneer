@@ -193,7 +193,26 @@ class EvidenceEngine:
             except (ValueError, KeyError, TypeError) as exc:
                 e6 = False
                 ambiguity["error"] = str(exc)
-        add("E6", e6, ambiguity, [FailureCode.AMBIGUITY_INVALID])
+        # [INDEPENDENT] A conditional request ("if X then A, else B") is real only if
+        # X holds or fails in the data as claimed and the branch taken is the one executed.
+        needs_condition = Stressor.CONDITIONAL in meta.stressors or meta.condition is not None
+        condition = {"applicable": needs_condition}
+        c_ok = not needs_condition
+        if meta.condition:
+            try:
+                spec = meta.condition
+                holds = bool(fresh.query_data(spec["collection"], [tuple(c) for c in spec["where"]]))
+                names = [a.name for a in actions]
+                taken, other = (spec["if_true"], spec["if_false"]) if holds else (spec["if_false"], spec["if_true"])
+                c_ok = (holds == bool(spec["holds"]) and spec["if_true"] != spec["if_false"]
+                        and taken in names and other not in names)
+                condition.update(evaluated=holds, claimed=bool(spec["holds"]), taken=taken, not_taken=other, executed=names)
+            except (ValueError, KeyError, TypeError) as exc:
+                c_ok = False
+                condition["error"] = str(exc)
+        details = dict(ambiguity, **({"condition": condition} if needs_condition else {}))
+        add("E6", e6 and c_ok, details, ([] if e6 else [FailureCode.AMBIGUITY_INVALID])
+            + ([] if c_ok else [FailureCode.CONDITION_INVALID]))
         if criteria and criteria.communicate_info:
             messages.append(AssistantMessage(role="assistant", content="\n".join(criteria.communicate_info)))
         simulation = SimulationRun(id="reference", task_id=task.id, start_time="reference", end_time="reference",

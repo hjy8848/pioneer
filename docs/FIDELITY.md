@@ -61,6 +61,14 @@
 
 ## 附加约束（来自项目要求，不来自博客）
 
+Step 5 `[INDEPENDENT]`（博客只给了 stressor 的名字和"追踪器引导下一代"这句话，下面都是我们补的）：
+- 六种 stressor 的操作性定义：`chain` 加入父题没有的原子动作；`multi_entity` 加入父题已有种类的动作、作用于同一用户的更多实体；`policy_pushback` 结果为拒绝或部分执行；`conditional` 带 `{collection, where, holds, if_true, if_false}`；`underspecified` 带 `{collection, initial_where, clarified_where}`；`reasoning` 要求用户目标需要比较或计算。Evolver 提交时只做形状检查，场景是否真实由 Verifier 对环境数据检查。
+- 条件请求的证据放进 E6：在初始状态上求值条件，要求与声称一致，且执行的是被选中的分支、没有执行另一分支。推理类用 `pick={min|max}` 选出唯一极值记录，平局视为不合法。
+- 深度 = 父深度 + 1；一次变异只加一种压力，`stressors` 沿父子链累积。深度上限 4（取自博客图 3）。
+- 追踪维度：写工具、写工具对、stressor、结果类型、深度、世界模型规则命中。调度：缺少 refuse 或 partial 时优先分配 `policy_pushback`，其余按已覆盖最少的 stressor；父题取最浅的未覆盖深度的上一层中子题最少的。
+- 同一家族共享用户，所以每用户任务数上限单独设为 `evolution.max_tasks_per_user`（深度 0 阶段是 2）。
+- Evolver 与其他角色共用同一个模型和同一套缓存客户端。
+
 Step 4.5 `[INDEPENDENT]`（博客没写，为让流水线跑通而补）：
 - 阶段 prompt 不含 Retail 业务规则；领域名、规则语法、opaque ID 路径来自适配层。Explorer 原先在第 23/31 轮的催促消息里点名了两个已知缺口，已删除，Step 2 的 world model 是在有这条提示的情况下产出的。
 - 用户剧本里禁止出现的 ID：取「嵌套在记录内部的 dict-of-record 字段的键」，由数据库结构推导（Retail 里即 item ID 和 payment ID）；顶层集合的键（用户、订单、商品 ID）允许出现。

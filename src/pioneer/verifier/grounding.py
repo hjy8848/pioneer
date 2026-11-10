@@ -33,9 +33,9 @@ def resolve(expr, outputs, text):
             value = value[int(segment)]
         else:
             value = value[segment]
-    if "where" in expr:
+    if "where" in expr or "pick" in expr:
         candidates = list(value.values()) if isinstance(value, dict) else list(value)
-        clauses = expr["where"]
+        clauses = expr.get("where", [])
         for _, _, operand in clauses:
             if isinstance(operand, dict):
                 resolve(operand, outputs, text)
@@ -44,6 +44,19 @@ def resolve(expr, outputs, text):
         rows = [row for row in candidates if all(_OPS[op](_get_path(row, field),
                     resolve(operand, outputs, text) if isinstance(operand, dict) else operand)
                     for field, op, operand in clauses)]
+        if "pick" in expr:
+            # [INDEPENDENT] Comparison-based selection ("the cheapest"): keep the
+            # row with the extreme value of one numeric field; a tie is ambiguous.
+            (kind, key), = expr["pick"].items()
+            if kind not in {"min", "max"}:
+                raise ValueError("pick must be min or max")
+            scored = [(_get_path(row, key), row) for row in rows]
+            if not scored or any(not isinstance(s, (int, float)) for s, _ in scored):
+                raise ValueError("pick needs a numeric field on every candidate")
+            extreme = (min if kind == "min" else max)(s for s, _ in scored)
+            rows = [row for s, row in scored if s == extreme]
+            if len(rows) != 1:
+                raise ValueError(f"pick {kind} {key} is tied between {len(rows)} candidates")
         if not expr.get("many") and len(rows) != 1:
             raise ValueError(f"selector is not unique: {len(rows)} candidates")
         values = [_get_path(row, expr["field"]) for row in rows]

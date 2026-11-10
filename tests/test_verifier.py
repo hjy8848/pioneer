@@ -68,6 +68,10 @@ def test_failure_code_counterexamples(code, knowledge, monkeypatch):
     elif code == FailureCode.AMBIGUITY_INVALID:
         meta.stressors = [Stressor.UNDERSPECIFIED]
         meta.ambiguity = dict(collection="orders", initial_where=[("order_id", "eq", order["order_id"])], clarified_where=[])
+    elif code == FailureCode.CONDITION_INVALID:
+        meta.stressors = [Stressor.CONDITIONAL]  # the data says the order is pending; the task claims it is not
+        meta.condition = dict(collection="orders", where=[["order_id", "eq", order["order_id"]], ["status", "eq", "pending"]],
+                              holds=False, if_true="cancel_pending_order", if_false="modify_user_address")
     elif code == FailureCode.REWARD_MISMATCH:
         monkeypatch.setattr(RetailSynthEnv, "reward", lambda *a: SimpleNamespace(reward=0))
     elif code == FailureCode.UNREACHABLE_E2E:

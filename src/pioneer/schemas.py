@@ -45,6 +45,7 @@ class FailureCode(str, Enum):
     ID_LEAK = "ID_LEAK"
     REFUSAL_NOT_FORBIDDEN = "REFUSAL_NOT_FORBIDDEN"
     AMBIGUITY_INVALID = "AMBIGUITY_INVALID"
+    CONDITION_INVALID = "CONDITION_INVALID"
     REWARD_MISMATCH = "REWARD_MISMATCH"
     UNREACHABLE_E2E = "UNREACHABLE_E2E"
     DUPLICATE = "DUPLICATE"
@@ -112,4 +113,7 @@ class TaskMeta(BaseModel):
     communicate_bindings: list[dict] = Field(default_factory=list)
     refusal_requests: list[dict] = Field(default_factory=list)
     ambiguity: Optional[dict] = None
+    # {collection, where, holds, if_true, if_false}: the user's "if X then A else B"
+    # request; E6 evaluates X against the initial state and checks the taken branch.
+    condition: Optional[dict] = None
     requested_capability: Optional[str] = None

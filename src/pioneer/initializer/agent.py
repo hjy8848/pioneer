@@ -6,6 +6,7 @@ from pioneer.schemas import TaskMeta
 from pioneer.explorer import ExplorerAgent
 from pioneer.explorer.agent import function
 from pioneer.verifier import EvidenceEngine, task_signatures
+from .contract import check_actions, scenario_key
 from .diversity import candidate_pool
 from .requirements import WAIT_FOR_COMPLETION, require_completion_wait
 
@@ -67,8 +68,36 @@ Inspect environment, trial the reference, submit. Repair reported preflight fail
 """
 
 
-def build_system(metadata):
-    return SYSTEM.replace("{domain}", metadata["domain"])
+# [INDEPENDENT] Appended only for depth > 0, so depth-0 prompts (and their cached
+# responses) are unchanged. Domain-agnostic: formats and obligations only.
+DEEPER = """
+Deeper scenarios (payload.scenario.depth > 0). payload.parent is the verified task this
+scenario makes harder; payload.scenario.stressors says how, the last entry being the new one.
+Keep the parent's user and entities unless the stressor needs others, and keep every
+requirement the parent already meets (READ provenance, refusal or ambiguity evidence).
+Reference actions follow scenario.expected_outcome: complete = every intent, in order;
+refuse = no actions at all; partial = only the part the rules permit; when scenario.conditions
+is set, only the branch the data selects. The depth-zero rule 'exactly the requested tool once'
+does not apply. Extra meta fields, all checked against the real data by the Verifier:
+refusal_requests=[{tool,arguments,after_actions?}]: each request the user insists on that the
+rules forbid. The Verifier runs it in a sandbox (after the first after_actions reference
+actions, when given); the tool must reject it or it must violate a rule.
+ambiguity={collection,initial_where,clarified_where}: where-clauses [[field,op,value]]. The
+user's first description must match several records and, with the clarification the user
+gives only when asked (put it in unknown_info), exactly one.
+condition={collection,where,holds,if_true,if_false}: the user's 'if X then A else B'. where is
+X as clauses over the collection, holds says whether X is true in the initial data, if_true
+and if_false are the two branch tool names; the reference actions contain the branch the data
+selects and not the other one.
+Comparison goals: a read expression may carry pick={min:field} or pick={max:field}, with
+where=[] when there is no filter, to select the single record with the extreme numeric
+value. Ties are rejected, so choose entities where the extreme is unique.
+"""
+
+
+def build_system(metadata, depth=0):
+    text = SYSTEM.replace("{domain}", metadata["domain"])
+    return text + DEEPER if depth else text
 
 
 class InitializerAgent:
@@ -88,23 +117,31 @@ class InitializerAgent:
         target = scenario.intents[0].atomic_action
         collection, pool, eligible = candidate_pool(env, self.knowledge, target, holdout=self.toolbox.holdout,
             ledger=ledger, seed=f"{seed}:{candidate_id}", size=pool_size)
-        limits = dict(max_tasks_per_user=ledger.max_tasks_per_user,
-                      users_at_limit=sorted(u for u, n in ledger.users.items() if n >= ledger.max_tasks_per_user),
-                      used_entities_for_this_action=sorted(e for a, e in ledger.pairs if a == target))
-        return dict(collection=collection, eligible_count=eligible, entities=pool), limits
+        return dict(collection=collection, eligible_count=eligible, entities=pool), self._limits(ledger, target)
+
+    def _limits(self, ledger, key):
+        return dict(max_tasks_per_user=ledger.max_tasks_per_user,
+                    users_at_limit=sorted(u for u, n in ledger.users.items() if n >= ledger.max_tasks_per_user),
+                    used_entities_for_this_action=sorted(e for a, e in ledger.pairs if a == key))
 
     def run(self, scenario, candidate_id, *, previous=None, diagnosis=None, seen_instance=(), max_turns=20,
-            ledger=None, pool_size=20, seed=0):
+            ledger=None, pool_size=20, seed=0, parent=None):
         summary = [{k:r[k] for k in ("rule_id", "tools", "text", "check")} for r in self.knowledge["rules"]]
         metadata = self.toolbox.metadata
         payload = dict(scenario=scenario.model_dump(mode="json"), candidate_id=candidate_id,
             domain=metadata["domain"], tools=metadata["tools"], policy=metadata["policy"], rules=summary,
             opaque_id_paths=metadata["opaque_id_paths"],
             required_sentence=WAIT_FOR_COMPLETION, previous=previous, diagnosis=diagnosis)
+        key = scenario_key(scenario)
+        if parent is not None:  # key added only when present: depth-0 payloads stay identical
+            payload["parent"] = parent
         if ledger is not None:
-            payload["candidate_pool"], payload["reuse_limits"] = self._pool(scenario, candidate_id, ledger, pool_size, seed)
-        messages = [dict(role="system", content=build_system(metadata)), dict(role="user", content=json.dumps(payload))]
-        target = scenario.intents[0].atomic_action
+            if scenario.depth == 0:
+                payload["candidate_pool"], payload["reuse_limits"] = self._pool(scenario, candidate_id, ledger, pool_size, seed)
+            else:  # deeper tasks extend their parent's entities, so there is no fresh-entity pool
+                payload["reuse_limits"] = self._limits(ledger, key)
+        messages = [dict(role="system", content=build_system(metadata, scenario.depth)),
+                    dict(role="user", content=json.dumps(payload))]
         self.trace, self.submissions, self.queried = [], [], False
         for turn in range(max_turns):
             print(f"Initializer {candidate_id} turn={turn + 1}", flush=True)
@@ -126,15 +163,15 @@ class InitializerAgent:
                         task = Task.model_validate(args["task"])
                         meta = TaskMeta.model_validate(args["meta"])
                         task.id, meta.scenario_id = candidate_id, scenario.scenario_id
-                        meta.depth, meta.expected_outcome = 0, scenario.expected_outcome
+                        meta.depth, meta.expected_outcome = scenario.depth, scenario.expected_outcome
                         meta.stressors, meta.parent_id = scenario.stressors, scenario.parent_id
+                        meta.condition = meta.condition or scenario.conditions
+                        meta.ambiguity = meta.ambiguity or scenario.ambiguity
                         require_completion_wait(task)
                         if task.initial_state is not None:
-                            raise ValueError("depth-zero initialization uses the seeded database without patches")
-                        actual = [a.name for a in task.evaluation_criteria.actions or []]
-                        expected = [] if target.startswith("inform:") else [target]
-                        if actual != expected:
-                            raise ValueError(f"reference tools must be {expected}")
+                            raise ValueError("depth-zero initialization uses the seeded database without patches"
+                                             if scenario.depth == 0 else "initialization uses the seeded database without patches")
+                        check_actions(scenario, [a.name for a in task.evaluation_criteria.actions or []])
                         meta.num_write_actions = sum(a.name != "transfer_to_human_agents" for a in task.evaluation_criteria.actions)
                         report = EvidenceEngine(self.knowledge, holdout=self.toolbox.holdout,
                             seen_instance=seen_instance).evaluate(task, meta, run_e8=False)
@@ -149,7 +186,7 @@ class InitializerAgent:
                             if ledger is not None:
                                 env = RetailSynthEnv()
                                 env.init(task)
-                                reason = ledger.violation(target, *ledger.entities_of(task, meta, env))
+                                reason = ledger.violation(key, *ledger.entities_of(task, meta, env))
                             if reason:
                                 self.submissions.append(dict(turn=turn, stage="diversity", passed=False,
                                     failed_checks=["DIVERSITY"], failure_codes=["DIVERSITY"]))

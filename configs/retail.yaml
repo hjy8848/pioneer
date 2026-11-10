@@ -8,9 +8,10 @@ tau2:
 
 llm:
   # One backbone for all synthesis roles, as in the blog (model is our choice; blog's is unnamed).
-  model: openai/qwen3.7-max  # exact gateway ID uses OpenAI-compatible adapter
+  model: openai/dashscope/qwen3.7-plus  # gateway id is dashscope/qwen3.7-plus; openai/ selects the adapter (Explorer ran on qwen3.7-max)
   temperature: 0.0
   max_tokens: 16000
+  timeout: 600              # seconds per request; qwen3.7-plus often exceeds the old 120 s default
   cache_dir: data/cache/llm
 
 user_simulator:
@@ -19,6 +20,7 @@ user_simulator:
 
 evolution:
   max_depth: 4
+  max_tasks_per_user: 8      # a family of descendants shares its parent's user, so the depth-0 limit of 2 does not apply
   generations: 5
   candidates_per_generation: 20
   depth0_per_atomic_action: 3

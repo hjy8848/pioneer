@@ -2,7 +2,6 @@
 import argparse
 import json
 import os
-from collections import Counter
 from pathlib import Path
 import yaml
 from pioneer.paths import REPO_ROOT, HOLDOUT_DIR, TAU2_DATA_DIR
@@ -13,6 +12,10 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--atomic")
     parser.add_argument("--n", type=int)
+    parser.add_argument("--ledger-root", type=Path,
+                        help="batch root whose shards/*/candidates.jsonl define already-used entities (default: --out)")
+    parser.add_argument("--known-tasks", type=Path,
+                        help="jsonl of {task, meta} admitted earlier; counted for entity reuse limits only")
     args = parser.parse_args()
     os.environ.setdefault("TAU2_DATA_DIR", str(TAU2_DATA_DIR))
     os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
@@ -20,6 +23,9 @@ def main():
     from pioneer.llm import LiteLLMClient
     from pioneer.schemas import Scenario, Intent, ExpectedOutcome
     from pioneer.verifier import verify
+    from pioneer.env import RetailSynthEnv
+    from pioneer.initializer.diversity import EntityLedger
+    from pioneer.stats.ledger import summarize_ledger
     config = yaml.safe_load((REPO_ROOT / "configs/retail.yaml").read_text(encoding="utf-8"))
     load = lambda path: json.loads(path.read_text(encoding="utf-8"))
     knowledge = load(REPO_ROOT / "data/knowledge/retail_world_model.json")
@@ -41,6 +47,28 @@ def main():
         with ledger_path.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(record, ensure_ascii=False) + "\n")
         history.append(record)
+
+    diversity = config.get("diversity", {})
+    ledger_root = args.ledger_root or args.out
+
+    def entity_ledger():
+        """Rebuilt before every candidate so sibling shard workers' admissions count."""
+        files = [ledger_path] + sorted((ledger_root / "shards").glob("*/candidates.jsonl"))
+        rows, seen_ids = [], set()
+        for file in files:
+            if not file.exists() or file.resolve() in seen_ids:
+                continue
+            seen_ids.add(file.resolve())
+            rows += [r for r in map(json.loads, file.read_text(encoding="utf-8").splitlines()) if r.get("passed")]
+        if args.known_tasks and args.known_tasks.exists():
+            for line in args.known_tasks.read_text(encoding="utf-8-sig").splitlines():
+                if line.strip():
+                    known = json.loads(line)
+                    rows.append(dict(known, atomic_action=known.get("atomic_action")
+                                     or known["task"]["evaluation_criteria"]["actions"][0]["name"]))
+        env = RetailSynthEnv()
+        env.init()
+        return EntityLedger.from_rows(rows, env, diversity.get("max_tasks_per_user", 2))
     for atom in atoms:
         for index in range(count):
             cid = f"depth0:{atom}:{index}"
@@ -60,7 +88,8 @@ def main():
                 generation = None
                 print(f"{cid} round={round_no} generating", flush=True)
                 try:
-                    task, meta = initializer.run(scenario, cid, previous=previous, diagnosis=diagnosis, seen_instance=seen)
+                    task, meta = initializer.run(scenario, cid, previous=previous, diagnosis=diagnosis, seen_instance=seen,
+                        ledger=entity_ledger(), pool_size=diversity.get("pool_size", 20), seed=config["seed"])
                     generation = dict(client.usage)
                     meta.repair_rounds = round_no
                     report = verify(task, meta, knowledge, llm=client, seen_instance=seen,
@@ -68,7 +97,8 @@ def main():
                     validation = {k:client.usage[k] - generation[k] for k in generation}
                     record = dict(candidate_id=cid, atomic_action=atom, round=round_no, passed=report.passed,
                         task=task.model_dump(mode="json"), meta=meta.model_dump(mode="json"), report=report.model_dump(mode="json"),
-                        generation_usage=generation, validation_usage=validation, llm_usage=client.usage, initializer_trace=initializer.trace)
+                        generation_usage=generation, validation_usage=validation, llm_usage=client.usage, initializer_trace=initializer.trace,
+                        preflight_submissions=initializer.submissions)
                     append(record)
                     print(f"{cid} passed={report.passed} codes={[c.value for c in report.failure_codes]}", flush=True)
                     if report.passed:
@@ -85,7 +115,8 @@ def main():
                     append(dict(candidate_id=cid, atomic_action=atom, round=round_no, passed=False,
                         error=diagnosis, proposal=previous, generation_usage=generation or dict(client.usage),
                         validation_usage={k:client.usage[k]-generation[k] for k in generation} if generation else {},
-                        llm_usage=dict(client.usage), initializer_trace=initializer.trace))
+                        llm_usage=dict(client.usage), initializer_trace=initializer.trace,
+                        preflight_submissions=initializer.submissions))
                     print(f"{cid} {diagnosis}", flush=True)
                     if type(exc).__name__ in {"RateLimitError", "AuthenticationError", "APIConnectionError"}:
                         raise
@@ -93,14 +124,8 @@ def main():
                 queued.append(dict(candidate_id=cid, scenario=scenario.model_dump(mode="json"), previous=previous, diagnosis=diagnosis))
             (args.out / "depth0.jsonl").write_text("".join(json.dumps(dict(task=r["task"], meta=r["meta"]), ensure_ascii=False)+"\n" for r in accepted), encoding="utf-8")
             (args.out / "rework_queue.json").write_text(json.dumps(queued, ensure_ascii=False, indent=2), encoding="utf-8")
-    total = sum(r["llm_usage"]["cost_usd"] for r in history)
-    summary = dict(accepted=len(accepted), rework_queue=len(queued), total_cost_usd=total,
-        average_cost_per_accepted=total / len(accepted) if accepted else None,
-        projected_600_cost_usd=total / len(accepted)*600 if accepted else None,
-        by_atomic={atom:dict(attempts=sum(r["atomic_action"]==atom for r in history),
-            first_pass=sum(r["atomic_action"]==atom and r.get("passed") and r["round"]==0 for r in history),
-            after_rework=sum(r["atomic_action"]==atom and r.get("passed") and r["round"]>0 for r in history)) for atom in atoms},
-        failure_codes=dict(Counter(code for r in history for code in r.get("report",{}).get("failure_codes",[]))))
+    summary = summarize_ledger(history, atoms, requested=len(atoms) * count)
+    summary["rework_queue"] = len(queued)
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary), flush=True)
 

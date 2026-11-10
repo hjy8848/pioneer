@@ -35,7 +35,7 @@ python scripts/initialize_batch.py --out data/runs/depth0 --workers 4 --n 3
 
 用户要求停止扩充并推送现有结果。本批保留 **11 个通过 E1–E9 的任务，覆盖 6/13 类**；全部通过原生 Task 和 TaskMeta 加载。每个任务的 E8 已运行真实完整对话。取消订单 3 个、交换已送达商品 1 个、修改待处理订单地址 3 个、修改待处理商品 2 个、修改支付方式 1 个、修改用户地址 1 个。其余 7 类未完成，Step 4 全类别验收保持未完成。
 
-可加载任务及验证证据见 [depth0_partial.jsonl](../data/knowledge/depth0_partial.jsonl)，各类数量和费用见 [initializer_partial.json](../reports/initializer_partial.json)。11 个已完成记录均首轮通过完整验证，外层返工为 0；生成内部的预检查修复计入生成费用。未结束候选及缓存保留在本地运行目录。
+可加载任务及验证证据见 [depth0_partial.jsonl](../data/runs/depth0_partial.jsonl)（Step 4.5 检查实体复用后剩 10 题，剔除的 1 题在同目录 `depth0_partial.dropped.jsonl`），各类数量和费用见 [initializer_partial.json](../reports/initializer_partial.json)。11 个已完成记录均首轮通过完整验证，外层返工为 0；生成内部的预检查修复计入生成费用。未结束候选及缓存保留在本地运行目录。
 
 已完成记录费用：生成 $5.097342、验证 $4.440353、外层返工 $0，合计 $9.537695。包含被中断候选的已返回缓存响应共 $11.669280；中断时尚未返回的请求用量未知。按已知费用除以 11 个任务，平均成本下界约 $1.060844，600 题外推下界约 $636.51，仅供本批试跑参考。
 

@@ -17,3 +17,5 @@ data/runs/
 data/holdout/
 data/knowledge/
 reports/tmp/
+
+.pytest_tmp/

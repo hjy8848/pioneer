@@ -237,7 +237,14 @@
 
 ---
 
-### Step 4.5：Step 4 review 跟进项，并补完 Step 4 ⬜
+### Step 4.5：Step 4 review 跟进项，并补完 Step 4 🔶
+
+完成记录：第 1、2、3、5 项已完成，第 4 项（补齐 7 类原子动作）未做，因为需要真实调用模型。
+- 第 1 项：Explorer / Initializer 的 prompt 去掉手写的 Retail 规则，领域名、规则语法说明、opaque ID 路径由适配层 metadata 注入；Explorer 催促消息里提示已知缺口的那句也删掉了。Verifier 的 ID 泄露检查改用适配层从 schema 推导的 opaque ID。
+- 第 2 项：Initializer 记录每次 `submit_candidate` 的阶段和失败码，统计给出「只算 Verifier 返工」和「预检失败也算返工」两种首轮通过率（`stats/ledger.py`）。
+- 第 3 项：候选池按 seed 抽样，复用账本限制同一（原子动作，订单）和每用户 2 题；已有 11 题检查后剔除 1 题。
+- 第 5 项：`depth0_partial.jsonl` 已移到 `data/runs/`。
+- 额外发现并处理：Step 2.5 补探索的 5 条规则全部写死了实例 ID，已用 `scripts/audit_world_model.py` 移出有效规则（有效规则 12 条，覆盖率回到 15/60）；`probe()` 之后会拒绝写死实体 ID 的检查。
 
 以下几项来自对 `f85a82e` 的 review。按顺序执行：先完成第 1、2、3 项，再补齐剩余的 7 类原子动作（第 4 项）。如果先补题，补出来的题仍然依赖手写的领域规则，还得重做。
 

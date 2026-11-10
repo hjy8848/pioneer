@@ -125,9 +125,9 @@ class EvidenceEngine:
         add("E3", state_ok, dict(changed=sorted(changed), allowed=sorted(allowed), unexpected=sorted(unexpected)), state_failures)
         known, text = instruction_text(task)
         # Match actual native identifiers, not every number (ZIP/product IDs are valid).
-        item_ids = {v["item_id"] for v in env.query_data("variants")}
-        payment_ids = {pid for u in env.query_data("users") for pid in u["payment_methods"]}
-        leaked = [value for value in item_ids | payment_ids if value in text]
+        # [INDEPENDENT] Opaque ids are derived from the DB schema by the adapter
+        # (keys of dict-of-record fields nested inside records), not hand-listed.
+        leaked = sorted(value for value in env.opaque_identifiers() if value in text)
         grounding, grounding_error = None, None
         fresh = RetailSynthEnv()
         fresh.init(task)

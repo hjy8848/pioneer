@@ -15,6 +15,7 @@ from pioneer.paths import TAU2_DIR, TAU2_DATA_DIR, TAU2_COMMIT, HOLDOUT_DIR
 from .rules import check_rule
 from .source import extract_tools, extract_models
 from .coverage import policy_coverage, save_world_model
+from .validation import collect_identifiers, instance_identifiers
 
 
 def function(name, description, properties, required=()):
@@ -22,62 +23,71 @@ def function(name, description, properties, required=()):
         parameters=dict(type="object", properties=properties, required=list(required))))
 
 
-TOOLS = [
-    function("read_source", "Read allowlisted native Retail source or policy.",
-             {"path": {"type": "string", "enum": ["tools.py", "data_model.py", "policy.md"]}}, ["path"]),
-    function("get_metadata", "Get native policy, schema, tool names/types and database statistics.", {}),
-    function("query_data", "Read seeded entities, excluding holdout users/orders. where contains [field,op,value] clauses.",
-        {"collection": {"type": "string", "enum": ["users", "orders", "products", "variants"]},
-         "where": {"type": "array"}, "limit": {"type": "integer"}}, ["collection"]),
-    function("sandbox_execute", "Observe a tool in a fresh sandbox. Optional patches [{collection,id,changes}] change only a local DB copy; setup is [{tool,arguments}].",
-        {"tool": {"type": "string"}, "arguments": {"type": "object"}, "patches": {"type": "array"}, "setup": {"type": "array"}}, ["tool", "arguments"]),
-    function("probe_condition", "Propose a state precondition and two fresh cases. Program checks predicate true/false then executes both. Labels are computed, not supplied by you.",
-        {"rule_id": {"type": "string"}, "tool": {"type": "string"}, "text": {"type": "string"},
-         "policy_quote": {"type": "string"}, "check": {"type": "object"}, "per_item": {"type": "boolean"},
-         "positive": {"type": "object"}, "negative": {"type": "object"}},
-        ["rule_id", "tool", "text", "check", "positive", "negative"]),
-    function("submit_world_model", "Submit actions mapping ALL tool names to requires/changes/failure_modes lists of {text,evidence:[id,...]}. Every requires/failure_modes claim must reference accepted probe IDs for that tool; changes must reference successful sandbox observations or probes. Also submit atomic_actions (names), conversation_rules [{rule_id,tools,text,check:null,level:conversation,policy_quote}].",
-        {"actions": {"type": "object"}, "atomic_actions": {"type": "array", "items": {"type": "string"}},
-         "conversation_rules": {"type": "array"}}, ["actions", "atomic_actions", "conversation_rules"]),
-]
+def build_tools(metadata):
+    """Tool schemas whose enums come from the environment adapter's metadata."""
+    return [
+        function("read_source", "Read an allowlisted native source file or the policy document.",
+                 {"path": {"type": "string", "enum": list(metadata["source_files"])}}, ["path"]),
+        function("get_metadata", "Get native policy, schema, tool names/types and database statistics.", {}),
+        function("query_data", "Read seeded entities, excluding holdout users and their records. where contains [field,op,value] clauses.",
+            {"collection": {"type": "string", "enum": list(metadata["collections"])},
+             "where": {"type": "array"}, "limit": {"type": "integer"}}, ["collection"]),
+        function("sandbox_execute", "Observe a tool in a fresh sandbox. Optional patches [{collection,id,changes}] change only a local DB copy; setup is [{tool,arguments}].",
+            {"tool": {"type": "string"}, "arguments": {"type": "object"}, "patches": {"type": "array"}, "setup": {"type": "array"}}, ["tool", "arguments"]),
+        function("probe_condition", "Propose a state precondition and two fresh cases. Program checks predicate true/false then executes both. Labels are computed, not supplied by you.",
+            {"rule_id": {"type": "string"}, "tool": {"type": "string"}, "text": {"type": "string"},
+             "policy_quote": {"type": "string"}, "check": {"type": "object"}, "per_item": {"type": "boolean"},
+             "positive": {"type": "object"}, "negative": {"type": "object"}},
+            ["rule_id", "tool", "text", "check", "positive", "negative"]),
+        function("submit_world_model", "Submit actions mapping ALL tool names to requires/changes/failure_modes lists of {text,evidence:[id,...]}. Every requires/failure_modes claim must reference accepted probe IDs for that tool; changes must reference successful sandbox observations or probes. Also submit atomic_actions (names), conversation_rules [{rule_id,tools,text,check:null,level:conversation,policy_quote}].",
+            {"actions": {"type": "object"}, "atomic_actions": {"type": "array", "items": {"type": "string"}},
+             "conversation_rules": {"type": "array"}}, ["actions", "atomic_actions", "conversation_rules"]),
+    ]
 
 
-SYSTEM = """You are the Retail Explorer agent [BLOG]. Discover the environment through tools.
-Read tools.py, data_model.py and policy.md, get_metadata, and query_data before submitting.
-Describe all 16 tools. Every claimed precondition and failure mode must have a paired
-probe you construct using real entities you find. Include positive observations of every
-tool for changes. Never trust your own verdict: the program computes classifications.
-Read the policy and inspect the source for gaps (including modification after item
-modification and exchange to the identical item). Include positive and violating cases.
+# [BLOG] "The recipe never needs to know what your domain is." The stage prompt
+# is therefore a domain-agnostic template; {domain} and {rule_dsl} are filled
+# from the environment adapter's metadata (tests/test_prompts_domain_free.py).
+SYSTEM_TEMPLATE = """You are the {domain} Explorer agent [BLOG]. Discover the environment through tools.
+Read every allowlisted source file, call get_metadata, and query_data before submitting.
+Describe every tool that get_metadata lists. Every claimed precondition and failure mode must
+have a paired probe you construct using real entities you find. Include positive observations
+of every tool for changes. Never trust your own verdict: the program computes classifications.
+Read the policy and inspect the source to find gaps between what the policy requires and what
+the tools actually enforce. Include positive and violating cases.
 You may synthesize local DB patches to isolate one condition; never patch disk.
 Positive/negative cases have arguments, optional patches and setup (as sandbox_execute).
-Patches target collection users/orders/products, an existing id, and changed top-level
-fields; identity keys cannot change. Use setup tool calls when testing action chains.
+Patches target a collection and an existing id, and change top-level fields; identity keys
+cannot change. Use setup tool calls when testing action chains.
 Policy quote must be an exact substring read from policy; omit it for tool-only facts.
-State check DSL: {collection:'orders',where:[['order_id','eq',{'ref':'args.order_id'}],
-['status','eq','pending']]} or {compare:[{'ref':'args.reason'},'in',
-['no longer needed','ordered by mistake']]} or {all:[check,...]} / {any:[check,...]}.
-Operators: eq,ne,gt,ge,lt,le,in,not_in,contains,len_eq,len_ge,exists.
-Refs args/order/user/payment/original_payment/required_amount are grounded by query_data.
-With per_item=true refs args.item_id,args.new_item_id,item.product_id iterate item pairs.
+{rule_dsl}
 Check examples explain the grammar, not rules you must reproduce. Propose your own rules
 from source. Unconfirmed claims are forbidden. Do not list every theoretical failure:
 only describe mechanisms you can confirm with your own paired probes in this run.
-For no-precondition tools (e.g. transfer), requires and failure_modes can be empty.
+For tools without preconditions, requires and failure_modes can be empty.
 Conversation rules cannot be DB-verified: level=conversation,check=null,policy_quote.
-Atomic actions must include all seven WRITE names, inform: types you can answer through
-READ tools, and transfer_to_human_agents. Submit through submit_world_model, not prose.
+Atomic actions must include every tool whose type is write, 'inform: <topic>' entries for
+question types you can answer through read-type tools, and every generic-type tool that the
+policy describes as handing the user off. Submit through submit_world_model, not prose.
 Batch independent tool calls when useful. Reuse discovered entity values and evidence IDs.
 Tool responses report errors; revise failed proposals. No official evaluation tasks exist
 in the tool surface. Keep exploration focused; complete within the configured turn budget.
 """
 
 
+def build_system(metadata):
+    return SYSTEM_TEMPLATE.replace("{domain}", metadata["domain"]).replace("{rule_dsl}", metadata["rule_dsl"])
+
+
 class ExplorerAgent:
     def __init__(self, llm, holdout_path=HOLDOUT_DIR / "users.json"):
         self.llm = llm
         self.holdout = set(json.loads(Path(holdout_path).read_text(encoding="utf-8")))
-        self.metadata = RetailSynthEnv().get_metadata()
+        adapter = RetailSynthEnv()
+        self.metadata = adapter.get_metadata()
+        self.tools = build_tools(self.metadata)
+        adapter.init()
+        self.identifiers = collect_identifiers(adapter)
         self.sources = {
             "tools.py": TAU2_DIR / "src/tau2/domains/retail/tools.py",
             "data_model.py": TAU2_DIR / "src/tau2/domains/retail/data_model.py",
@@ -171,6 +181,10 @@ class ExplorerAgent:
             raise ValueError("rule ID already recorded; use a new ID for a revised probe")
         if policy_quote and policy_quote not in self.metadata["policy"]:
             raise ValueError("policy_quote must match source verbatim")
+        hard_coded = instance_identifiers(check, self.identifiers)
+        if hard_coded:
+            raise ValueError(f"check hard-codes entity identifiers {hard_coded}; express them with refs so the rule "
+                             "holds for every entity, not just this probe case")
         rule = dict(rule_id=rule_id, tools=[tool], text=text, check=check, per_item=per_item, level="state")
         records = []
         for compliant, case in ((True, positive), (False, negative)):
@@ -268,10 +282,12 @@ class ExplorerAgent:
         raise ValueError("unknown explorer tool")
 
     def run(self, out_path, max_turns=24):
-        messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": "Build the evidence-backed Retail world model now."}]
-        active_tools = TOOLS
+        domain = self.metadata["domain"]
+        messages = [{"role": "system", "content": build_system(self.metadata)},
+                    {"role": "user", "content": f"Build the evidence-backed {domain} world model now."}]
+        active_tools = self.tools
         if self.seed:
-            active_tools = TOOLS + [function("get_policy_coverage", "Inspect unmapped source paragraphs.", {}),
+            active_tools = self.tools + [function("get_policy_coverage", "Inspect unmapped source paragraphs.", {}),
                 function("complete_policy_review", "Finish supplementary review. Supply new_claims mapping tool to requires/failure_modes claims referencing accepted probe IDs, optional added conversation_rules, and paragraph_explanations mapping every remaining uncovered paragraph ID to its reason. Existing actions and proofs are retained.",
                          {"new_claims": {"type": "object"}, "conversation_rules": {"type": "array"}, "paragraph_explanations": {"type": "object"}})]
             messages[-1]["content"] = ("Continue this previous Explorer's policy review. Focus on the measured unmapped "
@@ -302,8 +318,8 @@ class ExplorerAgent:
                     "Finish exploration now. Batch any remaining probe_condition calls using cases already observed, "
                     "then submit_world_model. sandbox_execute IDs support changes only; requires and failure_modes "
                     "must reference accepted probe IDs. Do not claim mechanisms without a paired probe; leave "
-                    "unconfirmed mechanisms out. Remember the address-after-modification and identical-exchange "
-                    "policy gaps. Cover all 16 tools' observed changes, but do not keep adding speculative cases."})
+                    "unconfirmed mechanisms out. Cover every listed tool's observed changes, but do not keep "
+                    "adding speculative cases."})
             if self.result is not None:
                 accepted = [p for p in self.probes.values() if p["classification"] in {"confirmed_by_tool", "policy_only"}]
                 result = dict(self.result, rules=accepted, discarded_rules=[p for p in self.probes.values() if p not in accepted],

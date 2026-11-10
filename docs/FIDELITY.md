@@ -61,6 +61,14 @@
 
 ## 附加约束（来自项目要求，不来自博客）
 
+Step 4.5 `[INDEPENDENT]`（博客没写，为让流水线跑通而补）：
+- 阶段 prompt 不含 Retail 业务规则；领域名、规则语法、opaque ID 路径来自适配层。Explorer 原先在第 23/31 轮的催促消息里点名了两个已知缺口，已删除，Step 2 的 world model 是在有这条提示的情况下产出的。
+- 用户剧本里禁止出现的 ID：取「嵌套在记录内部的 dict-of-record 字段的键」，由数据库结构推导（Retail 里即 item ID 和 payment ID）；顶层集合的键（用户、订单、商品 ID）允许出现。
+- 实体多样性：候选池由已验证规则推出的实体约束加 seed 抽样得到；同一（原子动作，实体）不重复，每用户每批最多 2 题。
+- 首轮通过率给两种口径（见 `stats/ledger.py`）。
+- 写死实例 ID 的规则不得进入 world model；Step 2.5 的 5 条已被移出，覆盖率回到 15/60。
+- 尚未做：Explorer / Initializer 代码（不只是 prompt）里仍有 Retail 专用逻辑（如 `explorer/rules.py` 的 ref 解析、`case()` 的补丁集合），换到 Airline / Telecom / CAR-bench 时再抽到适配层。
+
 Step 3.5 `[INDEPENDENT]`：结构签名用于覆盖统计，不拒绝同结构的新实例；实例签名使用 actions 名称/参数、initial_state、stressor 集合、expected_outcome、communicate_info，排除剧本文字。Initializer 必须在 task_instructions 中包含等待操作完成后才结束的固定句，防止重现提前 STOP；没有采用额外 ART checklist。
 
 Step 3 `[INDEPENDENT]`：参数证据用原文/READ 输出表达式表示，身份匹配必须唯一，E4 是保守的可导出性近似；E6 验证候选声明的初始/澄清筛选，不能声称解决任意自然语言语义验证。拒绝请求可声明 after_actions 前缀。E9 内容签名不依赖调用者提供的签名字符串，实例签名忽略 action_id 和剧本文字，包含 stressor 集合（Step 3.5 修正）；任务池已见签名由后续流水线传入。作用域内生成适配只支持单进程顺序的原生对话。

@@ -4,10 +4,19 @@ import json
 from pioneer.explorer.agent import function
 from .evidence import EvidenceEngine
 
-TOOLS = [function("check_evidence", "Run/inspect an environment evidence item. Results are cached for this candidate; E8 is not rerun on repeated calls.",
+TOOLS = [function("check_evidence", "Run/inspect one environment evidence check. Results are cached for this candidate; E8 is not rerun on repeated calls.",
                   {"name": {"type": "string", "enum": [f"E{i}" for i in range(1, 10)]}}, ["name"]),
          function("submit_report", "Submit diagnosis [{check,cause}]. Each diagnosis must cite an inspected failed check. The program computes passed; your verdict cannot override it.",
                   {"diagnosis": {"type": "array"}}, ["diagnosis"])]
+
+
+# Module-level so the domain-free prompt test can inspect it (identical text to
+# the previous inline string, so cached Step 3 responses stay valid).
+SYSTEM = (
+    "You are the Verifier agent [BLOG]. Inspect every E1-E9 tool result, diagnose failures using concrete "
+    "steps/rule IDs/arguments from those results, then submit_report. Environment checks alone determine "
+    "admission. You cannot waive failed checks or promote an unreachable task. E8 may be blocked by earlier "
+    "failures; diagnose the actual root cause. Batch checks. Do not invent evidence.")
 
 
 class VerifierAgent:
@@ -17,11 +26,7 @@ class VerifierAgent:
     def run(self, task, meta, max_turns=8):
         inspected, trace = set(), []
         result = None
-        messages = [{"role": "system", "content":
-            "You are the Verifier agent [BLOG]. Inspect every E1-E9 tool result, diagnose failures using concrete "
-            "steps/rule IDs/arguments from those results, then submit_report. Environment checks alone determine "
-            "admission. You cannot waive failed checks or promote an unreachable task. E8 may be blocked by earlier "
-            "failures; diagnose the actual root cause. Batch checks. Do not invent evidence."},
+        messages = [{"role": "system", "content": SYSTEM},
             {"role": "user", "content": json.dumps(dict(task=task.model_dump(mode="json"), meta=meta.model_dump(mode="json"),
                 world_model_rules=[{k:r[k] for k in ("rule_id", "tools", "text", "check", "classification")}
                                    for r in self.engine.knowledge.get("rules", [])]), ensure_ascii=False)}]

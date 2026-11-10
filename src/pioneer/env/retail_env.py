@@ -66,6 +66,21 @@ _OPS: dict[str, Callable[[Any, Any], bool]] = {
 }
 
 
+# Domain-specific grammar notes shown to the Explorer. They live in the adapter
+# (not in the stage prompts) so the stage prompts stay domain-agnostic.
+RULE_DSL_HELP = (
+    "State check DSL: {collection:'orders',where:[['order_id','eq',{'ref':'args.order_id'}],"
+    "['status','eq','pending']]} or {compare:[{'ref':'args.reason'},'in',['no longer needed',"
+    "'ordered by mistake']]} or {all:[check,...]} / {any:[check,...]}. Operators: "
+    + ",".join(_OPS)
+    + ". Refs args/order/user/payment/original_payment/required_amount are grounded by "
+    "query_data. With per_item=true refs args.item_id,args.new_item_id,item.product_id "
+    "iterate item pairs. Express every fact about a specific entity through a ref, never "
+    "as a literal identifier copied from your probe case: literal entity identifiers make "
+    "the rule true for one instance only and the program rejects them."
+)
+
+
 def _get_path(obj: Any, path: str) -> Any:
     """Resolve a dotted path ("address.zip") on nested dicts; None if absent."""
     cur = obj
@@ -84,9 +99,52 @@ class RetailSynthEnv:
 
     domain = "retail"
     COLLECTIONS = ("users", "orders", "products", "variants")
+    # [INDEPENDENT] Primary-key field of each queryable collection.
+    KEY_FIELDS = {"users": "user_id", "orders": "order_id", "products": "product_id", "variants": "item_id"}
+    # Upstream files an Explorer may read (names resolved by the Explorer).
+    SOURCE_FILES = ("tools.py", "data_model.py", "policy.md")
 
     def __init__(self) -> None:
         self._env: Optional[Environment] = None
+
+    # ------------------------------------------------------------------ #
+    # Schema-derived identifier structure  [INDEPENDENT]
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _nested_id_collections(dump: dict) -> dict[str, set]:
+        """Dict-of-dict fields nested inside top-level records, e.g. ``a.*.b`` -> keys.
+
+        Derived purely from the DB structure: a top-level collection's keys are
+        addressable entity ids; keys of dict-of-record fields *inside* a record
+        are opaque ids that a person would not normally state from memory.
+        """
+        found: dict[str, set] = {}
+        for collection, records in dump.items():
+            if not isinstance(records, dict):
+                continue
+            for record in records.values():
+                if not isinstance(record, dict):
+                    continue
+                for name, value in record.items():
+                    if isinstance(value, dict) and value and all(isinstance(v, dict) for v in value.values()):
+                        found.setdefault(f"{collection}.*.{name}", set()).update(value)
+        return found
+
+    def _dump(self) -> dict:
+        db = self._env.tools.db if self._env is not None else get_environment().tools.db
+        return db.model_dump()
+
+    def opaque_id_paths(self) -> list[str]:
+        return sorted(self._nested_id_collections(self._dump()))
+
+    def opaque_identifiers(self) -> set[str]:
+        """Identifier values that user-facing text must not contain (schema-derived)."""
+        return set().union(*self._nested_id_collections(self._dump()).values())
+
+    def top_level_keys(self) -> dict[str, set]:
+        """Entity ids of each top-level collection of the current DB."""
+        return {c: set(r) for c, r in self._dump().items()
+                if isinstance(r, dict) and r and all(isinstance(v, dict) for v in r.values())}
 
     # ------------------------------------------------------------------ #
     # get_metadata
@@ -110,6 +168,12 @@ class RetailSynthEnv:
             "tools": tools,
             "db_schema": RetailDB.model_json_schema(),
             "db_stats": self._db_stats(env.tools.db),
+            # [INDEPENDENT] Adapter facts the domain-agnostic stages consume.
+            "collections": list(self.COLLECTIONS),
+            "key_fields": dict(self.KEY_FIELDS),
+            "source_files": list(self.SOURCE_FILES),
+            "opaque_id_paths": sorted(self._nested_id_collections(env.tools.db.model_dump())),
+            "rule_dsl": RULE_DSL_HELP,
         }
 
     @staticmethod

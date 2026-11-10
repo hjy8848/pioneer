@@ -1,13 +1,14 @@
-"""[BLOG] Explorer; [INDEPENDENT] bounded compilation and deterministic validation."""
+"""仅用于离线回归，禁止在流水线中调用。[INDEPENDENT]"""
+
 import json
 from collections import Counter
 from pathlib import Path
 
 from pioneer.env import RetailSynthEnv
 from pioneer.paths import HOLDOUT_DIR, TAU2_DIR, TAU2_COMMIT
-from .source import extract_models, extract_tools
-from .rules import rule_catalog
-from .probes import probe_rule
+from pioneer.explorer.source import extract_models, extract_tools
+from .legacy_rules import rule_catalog
+from .legacy_probes import probe_rule
 
 
 def atomic_actions(tools):

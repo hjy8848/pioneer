@@ -4,10 +4,10 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from pioneer.explorer import build_knowledge
+from helpers.legacy_build import build_knowledge
 from pioneer.explorer.source import extract_tools
-from pioneer.explorer.rules import rule_catalog
-from pioneer.explorer.probes import probe_rule
+from helpers.legacy_rules import rule_catalog
+from helpers.legacy_probes import probe_rule
 from pioneer.llm import LiteLLMClient, MockLLM
 from pioneer.paths import TAU2_DIR, HOLDOUT_DIR
 
@@ -74,7 +74,7 @@ def test_required_policy_gaps(rule_id, label):
 
 
 def test_contradicted_rule_is_discarded(tmp_path, monkeypatch, holdout_path):
-    import pioneer.explorer.build as builder
+    import helpers.legacy_build as builder
     monkeypatch.setattr(builder, "probe_rule", lambda *a: {"classification": "contradicted", "cases": []})
     knowledge = build_knowledge(tmp_path / "k.json", MockLLM([mock_response()]), holdout_path)
     assert len(knowledge["discarded_rules"]) == 19

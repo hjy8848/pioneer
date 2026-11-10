@@ -4,8 +4,8 @@ import json
 import pytest
 from pioneer.env import RetailSynthEnv
 from pioneer.explorer.agent import ExplorerAgent
-from pioneer.explorer.probes import make_case
-from pioneer.explorer.rules import rule_catalog
+from helpers.legacy_probes import make_case
+from helpers.legacy_rules import rule_catalog
 from pioneer.llm import MockLLM
 
 

@@ -1,14 +1,10 @@
-"""[INDEPENDENT] Paired sandbox probes; fixtures exclude evaluation users.
+"""仅用于离线回归，禁止在流水线中调用。[INDEPENDENT]"""
 
-Each pair reloads the real environment. Local DB copies may be adjusted to
-isolate one precondition; snapshots record those synthetic starting states.
-Acceptance labels come only from execute(), never an LLM.
-"""
 from dataclasses import asdict
 
 from tau2.domains.retail.data_model import CreditCard, GiftCard, OrderPayment
 from pioneer.env import RetailSynthEnv
-from .rules import check_rule
+from pioneer.explorer.rules import check_rule
 
 
 ITEM_TOOLS = {"modify_pending_order_items", "exchange_delivered_order_items"}

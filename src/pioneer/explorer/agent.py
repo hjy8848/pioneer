@@ -14,6 +14,7 @@ from pioneer.env import RetailSynthEnv
 from pioneer.paths import TAU2_DIR, TAU2_DATA_DIR, TAU2_COMMIT, HOLDOUT_DIR
 from .rules import check_rule
 from .source import extract_tools, extract_models
+from .coverage import policy_coverage, save_world_model
 
 
 def function(name, description, properties, required=()):
@@ -86,6 +87,31 @@ class ExplorerAgent:
         self.exposed = {t["name"] for t in self.metadata["tools"]}
         self.observations, self.probes, self.visited = {}, {}, set()
         self.result = None
+        self.seed = None
+
+    def continue_from(self, world):
+        """[INDEPENDENT] Review measured gaps; no hand-written rule list is input."""
+        from copy import deepcopy
+        self.seed = deepcopy(world)
+        self.previous_trace = {k: deepcopy(world.get(k, [])) for k in ("agent_trace", "llm_requests")}
+        self.observations = deepcopy(world["observations"])
+        self.probes = {r["rule_id"]: deepcopy(r) for r in world["rules"] + world.get("discarded_rules", [])}
+        self.visited = {"read_source:tools.py", "read_source:data_model.py", "read_source:policy.md", "get_metadata", "query_data"}
+        self.coverage_before = policy_coverage(self.metadata["policy"], world["rules"], world["conversation_rules"])
+        return self
+
+    def complete_review(self, new_claims=None, conversation_rules=None, paragraph_explanations=None):
+        from copy import deepcopy
+        actions = deepcopy(self.seed["actions"])
+        for tool, kinds in (new_claims or {}).items():
+            for kind, claims in kinds.items():
+                if kind not in {"requires", "failure_modes"}:
+                    raise ValueError("review can add only evidenced conditions/failures")
+                actions[tool][kind].extend(claims)
+        rules = deepcopy(self.seed["conversation_rules"]) + (conversation_rules or [])
+        accepted = self.submit(actions, self.seed["atomic_actions"], rules)
+        self.result["paragraph_explanations"] = paragraph_explanations or {}
+        return accepted
 
     def safe_arguments(self, args):
         env = RetailSynthEnv()
@@ -207,6 +233,12 @@ class ExplorerAgent:
         return {"accepted": True}
 
     def dispatch(self, name, args):
+        if name == "complete_policy_review" and self.seed:
+            return self.complete_review(**args)
+        if name == "get_policy_coverage":
+            return policy_coverage(self.metadata["policy"],
+                [p for p in self.probes.values() if p["classification"] in {"confirmed_by_tool", "policy_only"}],
+                self.seed["conversation_rules"] if self.seed else [])
         if name == "read_source":
             path = args["path"]
             if path not in self.sources:
@@ -237,10 +269,20 @@ class ExplorerAgent:
 
     def run(self, out_path, max_turns=24):
         messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": "Build the evidence-backed Retail world model now."}]
+        active_tools = TOOLS
+        if self.seed:
+            active_tools = TOOLS + [function("get_policy_coverage", "Inspect unmapped source paragraphs.", {}),
+                function("complete_policy_review", "Finish supplementary review. Supply new_claims mapping tool to requires/failure_modes claims referencing accepted probe IDs, optional added conversation_rules, and paragraph_explanations mapping every remaining uncovered paragraph ID to its reason. Existing actions and proofs are retained.",
+                         {"new_claims": {"type": "object"}, "conversation_rules": {"type": "array"}, "paragraph_explanations": {"type": "object"}})]
+            messages[-1]["content"] = ("Continue this previous Explorer's policy review. Focus on the measured unmapped "
+                "paragraphs, construct your own positive/negative cases for missing actionable conditions, then call "
+                "complete_policy_review. Informational headings can remain uncovered with a reason. "
+                "Use available query_data and source tools. Prefer batched paired probes and finish this review within 12 turns. "
+                "Do not repeat prior observations or submit all existing action descriptions. Coverage before review: " + json.dumps(self.coverage_before))
         trace = []
         for turn in range(max_turns):
             print(f"Explorer turn {turn + 1}/{max_turns}", flush=True)
-            message = self.llm.chat(messages, TOOLS)
+            message = self.llm.chat(messages, active_tools)
             messages.append(message)
             calls = message.get("tool_calls") or []
             if not calls:
@@ -269,9 +311,12 @@ class ExplorerAgent:
                     tools=self.methods, models=extract_models(self.sources["data_model.py"]), db_schema=self.metadata["db_schema"],
                     db_stats=self.metadata["db_stats"], tau2_commit=TAU2_COMMIT, agent_trace=trace,
                     llm_usage=dict(self.llm.usage), llm_requests=getattr(self.llm, "records", []),
-                    llm_config=getattr(self.llm, "params", {"model": "MockLLM"}), holdout_users=len(self.holdout))
-                path = Path(out_path)
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-                return result
+                    llm_config=dict(getattr(self.llm, "params", {"model": "MockLLM"})), holdout_users=len(self.holdout))
+                result["llm_config"]["api_base"] = "<env:LITELLM_API_BASE>"
+                result["policy_coverage"] = policy_coverage(self.metadata["policy"], accepted,
+                    result["conversation_rules"], result.get("paragraph_explanations"))
+                if self.seed:
+                    result["coverage_before"] = self.coverage_before
+                    result["_previous_trace"] = self.previous_trace
+                return save_world_model(out_path, result)
         raise RuntimeError("Explorer turn budget exhausted without an accepted world model")

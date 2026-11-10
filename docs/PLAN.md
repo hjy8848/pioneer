@@ -86,7 +86,9 @@
 
 ---
 
-### Step 2.5：Step 2 review 跟进项 ⬜（在 Step 3 开始时一并完成）
+### Step 2.5：Step 2 review 跟进项 ✅
+
+完成记录：公开 API 仅导出 ExplorerAgent；模板及预制探针移到 tests/helpers。35 项测试通过；api_base 从 LITELLM_API_BASE 读取，不改写 Git 历史。补探索 12 次模型调用，估算 $1.103133；新增 5 confirmed_by_tool / 0 policy_only，另 1 条正例失效的探针丢弃。段落映射覆盖 15/60（25%）→20/60（33.3%）；余下 40 段的原因保留在主文件 policy_coverage，不能将其视为所有细粒度约束都已确认。轨迹和来源请求移到 retail_explorer_trace.json。详情见 docs/EXPLORER.md。
 
 以下四项来自对 `344c1f1` 的 review。
 
@@ -98,7 +100,7 @@
      - 谓词检查函数 `check_rule` 是工具，可以继续留在 `src/`。
    - 增加一个静态测试：`src/` 中除测试辅助代码外，任何地方都不得引用 `rule_catalog` 或 `_legacy_*`。
 2. **公开仓库中不能写内网地址。**
-   - 现状：`configs/retail.yaml` 里写死了 `api_base: http://10.130.138.46:8010/v1`。
+   - review 时的现状：`configs/retail.yaml` 里写死了内网 api_base（当前工作树不再保留该地址）。
    - 改法：
      - `api_base` 改为从环境变量读取（例如 `LITELLM_API_BASE`），和 key 的处理方式一样。
      - 配置文件里只保留模型名；`.env.example` 中补上这个变量名。

@@ -13,7 +13,7 @@ llm:
   cache_dir: data/cache/llm
 
 user_simulator:
-  model: TODO
+  model: same_as_llm        # [BLOG] one frontier model for all LLM roles, incl. user simulator
   temperature: 0.0
 
 evolution:
@@ -23,12 +23,13 @@ evolution:
   depth0_per_atomic_action: 3
   stressors: [chain, multi_entity, policy_pushback, conditional, underspecified, reasoning]
 
-repair:
-  max_rounds: 3
+rework:
+  rounds_per_batch: 5       # [INDEPENDENT] budget; unrepaired tasks go to rework_queue, not dropped
 
 verifier:
-  e2e_reachability: false   # V9; costs 2 full conversations per task
+  e2e_reachability: true    # E8, required (PLAN Step 3)
   e2e_trials: 2
 
 reward_basis_allowed: [[DB], [DB, COMMUNICATE]]
-target_verified_tasks: 50
+checkpoint_verified_tasks: 50    # PLAN Step 6: pause for human review here
+target_verified_tasks: 600       # [BLOG] "roughly 600 verified tasks per domain"

@@ -11,7 +11,7 @@
 
 ## 当前状态
 
-已完成 PLAN Step 0–3（包含 Step 2.5）：
+已完成 PLAN Step 0–3.5（包含 Step 2.5）：
 
 - 固定版本的 τ² 拉取脚本。
 - 六接口环境层：`get_metadata`、`init`、`run`、`state`、`query_data`、`reward`，以及扩展接口 `execute`。
@@ -19,7 +19,7 @@
 - 各阶段共享的数据契约。
 - 冒烟测试和隔离测试。
 
-Explorer agent 已实现，通过工具读取源码、查询环境、自行提出成对探针，并提交带程序证据的 world model。Verifier 的 E1–E9 和工具调用 agent 也已实现；Evolver、Initializer 待后续步骤实现，见 [docs/PLAN.md](docs/PLAN.md)。
+Explorer agent 已实现，通过工具读取源码、查询环境、自行提出成对探针，并提交带程序证据的 world model。Verifier 的 E1–E9 和工具调用 agent 也已实现。Step 4 的 Initializer、返工队列和批次入口已实现；按用户要求提前结束本批，保留 11 个完整验证任务，覆盖 6/13 类，尚未达到全类别验收。结果见 [docs/INITIALIZER.md](docs/INITIALIZER.md)。Evolver 待后续步骤实现，见 [docs/PLAN.md](docs/PLAN.md)。
 
 ## 安装与测试
 

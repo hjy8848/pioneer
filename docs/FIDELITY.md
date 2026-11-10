@@ -23,11 +23,11 @@
 | stressor 类别 | 更多动作串联、更多实体、对 policy 讨价还价、条件请求、需求不明确、推理层难度 | `schemas.Stressor` 中的 6 类 | 类别 `[BLOG]`，细则 `[INDEPENDENT]` |
 | 全局追踪器 | 追踪已覆盖的内容，引导下一代去补未覆盖的结果，"including … say no" | 覆盖维度和调度规则 | 原则 `[BLOG]`，维度 `[INDEPENDENT]` |
 | 最大深度 | 图 3 画到深度 4 | max_depth = 4 | `[BLOG]`（取自图） |
-| Initializer | user goal + 绑定到真实状态值的 reference outcome；`query_data` 用于把参考结果落到真实值上 | agent 用 `query_data` 和 sandbox 构造参考结果，不使用程序模板 | `[BLOG]` |
+| Initializer | user goal + 绑定到真实状态值的 reference outcome；`query_data` 用于把参考结果落到真实值上 | 已实现 agent 用 `query_data`、`sandbox_execute`、`submit_candidate` 构造参考结果，不提供动作模板。11 个任务通过全部 E1–E9，覆盖 6/13 类；用户提前结束本批，全类别验收未完成 | `[BLOG]`；工具协议和批次实现为 `[INDEPENDENT]` |
 | 入库标准 | reference outcome 可达，并且是 policy 要求的结果；LLM 认为合理不够 | 证据 E1–E8 全部由程序在环境中检查；verifier agent 不能覆盖结果 | `[BLOG]`；各检查项是 `[INDEPENDENT]` |
 | Verifier 角色 | 博客把 verifier 列为 LLM 角色 | 已实现 VerifierAgent，经工具检查 E1–E9 后提交诊断；passed 由程序计算，模型提交的 passed 不能覆盖失败证据 | `[BLOG]` 角色 / `[INDEPENDENT]` 分工 |
 | 端到端可达（E8） | user simulator 是合成流水线的角色之一；`run()` 是六接口之一 | 已用共享 qwen3.7-max 跑通：写任务 llm_agent_gt、只读 llm_agent，各加 user simulator，k=2；都为 1/1。先前因提前结束而失败的 0/0 样例被拒绝，未放宽标准。所有生成均经过本仓库缓存客户端，原生 evaluator 重新评分 | `[INDEPENDENT]` |
-| 失败处理 | "diagnosed and reworked until they pass"，不能只做过滤 | rework 预算用完后进入 `rework_queue` 继续修，最终未修好的如实报告 | `[BLOG]`；预算机制是 `[INDEPENDENT]` |
+| 失败处理 | "diagnosed and reworked until they pass"，不能只做过滤 | 已实现诊断回传、默认每批 5 轮，预算用完后进入 `rework_queue`，恢复后继续修；本批已完成候选无外层返工，未完成候选与缓存保留 | `[BLOG]`；预算机制是 `[INDEPENDENT]` |
 | 六接口 | `get_metadata`、`init`、`run`、`state`、`query_data`、`reward` | 全部实现 | `[BLOG]`；签名 `[INDEPENDENT]` |
 | `execute()` | 博客没有这个接口 | 单步执行，供重放和探针使用 | `[INDEPENDENT]` 扩展 |
 | 运行方式 | 本地进程内，或部署在 AgentCore Runtime 上 | 本地进程内 | `[BLOG]`（博客允许这种方式） |

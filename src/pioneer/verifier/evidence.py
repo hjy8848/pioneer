@@ -46,7 +46,7 @@ class EvidenceEngine:
         self.episode_runner = episode_runner
         self.report = None
 
-    def evaluate(self, task, meta):
+    def evaluate(self, task, meta, *, run_e8=True):
         self.report = None
         checks, codes, causes = [], [], {}
 
@@ -229,7 +229,7 @@ class EvidenceEngine:
         add("E9", not duplicate and not leaked_users, dict(structure_signature=structure, instance_signature=instance,
             duplicate=duplicate, structure_seen=structure in self.seen_structure, holdout_users=leaked_users),
             ([FailureCode.DUPLICATE] if duplicate else []) + ([FailureCode.HOLDOUT_LEAK] if leaked_users else []))
-        if all(c.passed for c in checks):
+        if all(c.passed for c in checks) and run_e8:
             before_usage = dict(self.llm.usage) if self.llm else {}
             episodes = []
             implementation = "llm_agent_gt" if actions else "llm_agent"
@@ -258,7 +258,7 @@ class EvidenceEngine:
             usage = {k: self.llm.usage[k] - before_usage[k] for k in before_usage} if self.llm else {}
             add("E8", any(e["reward"] == 1 for e in episodes), dict(trials=episodes, llm_usage=usage), [FailureCode.UNREACHABLE_E2E])
         else:
-            add("E8", False, dict(blocked_by=[c.name for c in checks if not c.passed]), [])
+            add("E8", False, dict(blocked_by=[c.name for c in checks if not c.passed], pending=not run_e8), [])
         checks.sort(key=lambda c: c.name)
         self.report = VerifierReport(passed=all(c.passed for c in checks), checks=checks, failure_codes=codes, diagnosis=causes)
         return self.report

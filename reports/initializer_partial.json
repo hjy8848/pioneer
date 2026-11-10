@@ -1,0 +1,95 @@
+{
+  "status": "stopped_by_user",
+  "step4_full_acceptance_met": false,
+  "accepted": 11,
+  "covered_atomic_count": 6,
+  "atomic_count": 13,
+  "uncovered_atomic_actions": [
+    "return_delivered_order_items",
+    "transfer_to_human_agents",
+    "inform: user details",
+    "inform: order details",
+    "inform: product details",
+    "inform: item details",
+    "inform: product types list"
+  ],
+  "by_atomic": {
+    "cancel_pending_order": {
+      "candidates": 3,
+      "first_pass": 3,
+      "after_rework": 0
+    },
+    "exchange_delivered_order_items": {
+      "candidates": 1,
+      "first_pass": 1,
+      "after_rework": 0
+    },
+    "modify_pending_order_address": {
+      "candidates": 3,
+      "first_pass": 3,
+      "after_rework": 0
+    },
+    "modify_pending_order_items": {
+      "candidates": 2,
+      "first_pass": 2,
+      "after_rework": 0
+    },
+    "modify_pending_order_payment": {
+      "candidates": 1,
+      "first_pass": 1,
+      "after_rework": 0
+    },
+    "modify_user_address": {
+      "candidates": 1,
+      "first_pass": 1,
+      "after_rework": 0
+    },
+    "return_delivered_order_items": {
+      "candidates": 0,
+      "first_pass": 0,
+      "after_rework": 0
+    },
+    "transfer_to_human_agents": {
+      "candidates": 0,
+      "first_pass": 0,
+      "after_rework": 0
+    },
+    "inform: user details": {
+      "candidates": 0,
+      "first_pass": 0,
+      "after_rework": 0
+    },
+    "inform: order details": {
+      "candidates": 0,
+      "first_pass": 0,
+      "after_rework": 0
+    },
+    "inform: product details": {
+      "candidates": 0,
+      "first_pass": 0,
+      "after_rework": 0
+    },
+    "inform: item details": {
+      "candidates": 0,
+      "first_pass": 0,
+      "after_rework": 0
+    },
+    "inform: product types list": {
+      "candidates": 0,
+      "first_pass": 0,
+      "after_rework": 0
+    }
+  },
+  "recorded_generation_cost_usd": 5.097342,
+  "recorded_validation_cost_usd": 4.440353,
+  "recorded_rework_cost_usd": 0,
+  "recorded_completed_cost_usd": 9.537695,
+  "known_cached_response_cost_usd": 11.66928,
+  "completed_average_cost": 0.8670631818181818,
+  "completed_rate_projection_600": 520.237909090909,
+  "cost_note": "Completed-record split excludes unfinished work. Cached-response cost includes completed responses from interrupted candidates; in-flight unreturned usage is unknown. Projection is pilot-only.",
+  "native_task_loading": "all exported entries validated by tau2 Task and TaskMeta",
+  "runtime_processes_stopped": true,
+  "known_cost_per_accepted_lower_bound": 1.0608436363636364,
+  "known_cost_projection_600_lower_bound": 636.5061818181819
+}

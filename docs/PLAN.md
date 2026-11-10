@@ -203,6 +203,8 @@
 
 ### Step 4：Initializer agent + 深度 0 + rework ⬜
 
+执行记录：Initializer 工具循环、返工队列、批次恢复和费用统计已实现，65 项测试通过。按用户要求提前结束本批并推送：11 个任务通过完整 E1–E9（含真实 E8），覆盖 6/13 类；其余 7 类未完成，故本步全类别验收仍未完成。逐类数量、费用和可加载任务见 [INITIALIZER.md](INITIALIZER.md) 与 [运行报告](../reports/initializer_partial.json)。
+
 **博客原文：**
 - "A task initializer turns each scenario into a concrete task: a user goal, plus a reference outcome tied to specific values in the environment state."
 - `query_data()` 的用途是 "Used to ground references in real values."

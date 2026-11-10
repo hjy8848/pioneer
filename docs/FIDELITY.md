@@ -25,8 +25,8 @@
 | 最大深度 | 图 3 画到深度 4 | max_depth = 4 | `[BLOG]`（取自图） |
 | Initializer | user goal + 绑定到真实状态值的 reference outcome；`query_data` 用于把参考结果落到真实值上 | agent 用 `query_data` 和 sandbox 构造参考结果，不使用程序模板 | `[BLOG]` |
 | 入库标准 | reference outcome 可达，并且是 policy 要求的结果；LLM 认为合理不够 | 证据 E1–E8 全部由程序在环境中检查；verifier agent 不能覆盖结果 | `[BLOG]`；各检查项是 `[INDEPENDENT]` |
-| Verifier 角色 | 博客把 verifier 列为 LLM 角色 | verifier agent 负责收集证据和诊断，`passed` 由程序计算 | `[BLOG]` 角色 / `[INDEPENDENT]` 分工 |
-| 端到端可达（E8） | user simulator 是合成流水线的角色之一；`run()` 是六接口之一 | 用 GT agent（无写动作的任务用 `llm_agent`）加 user simulator 跑 k 次，至少一次 reward=1 | `[INDEPENDENT]` |
+| Verifier 角色 | 博客把 verifier 列为 LLM 角色 | 已实现 VerifierAgent，经工具检查 E1–E9 后提交诊断；passed 由程序计算，模型提交的 passed 不能覆盖失败证据 | `[BLOG]` 角色 / `[INDEPENDENT]` 分工 |
+| 端到端可达（E8） | user simulator 是合成流水线的角色之一；`run()` 是六接口之一 | 已用共享 qwen3.7-max 跑通：写任务 llm_agent_gt、只读 llm_agent，各加 user simulator，k=2；都为 1/1。先前因提前结束而失败的 0/0 样例被拒绝，未放宽标准。所有生成均经过本仓库缓存客户端，原生 evaluator 重新评分 | `[INDEPENDENT]` |
 | 失败处理 | "diagnosed and reworked until they pass"，不能只做过滤 | rework 预算用完后进入 `rework_queue` 继续修，最终未修好的如实报告 | `[BLOG]`；预算机制是 `[INDEPENDENT]` |
 | 六接口 | `get_metadata`、`init`、`run`、`state`、`query_data`、`reward` | 全部实现 | `[BLOG]`；签名 `[INDEPENDENT]` |
 | `execute()` | 博客没有这个接口 | 单步执行，供重放和探针使用 | `[INDEPENDENT]` 扩展 |
@@ -60,6 +60,8 @@
 | 训练框架 | agentcore-rl-toolkit | ART 的 verl 或 sagemaker（DAPO）后端 | `[BLOG]` |
 
 ## 附加约束（来自项目要求，不来自博客）
+
+Step 3 `[INDEPENDENT]`：参数证据用原文/READ 输出表达式表示，身份匹配必须唯一，E4 是保守的可导出性近似；E6 验证候选声明的初始/澄清筛选，不能声称解决任意自然语言语义验证。拒绝请求可声明 after_actions 前缀。E9 内容签名不依赖调用者提供的签名字符串，实例签名忽略 action_id 和 stressor 标签；任务池已见签名由后续流水线传入。作用域内生成适配只支持单进程顺序的原生对话。
 
 Step 2.5 `[INDEPENDENT]`：按原文段落与规则 policy_quote 做映射，未覆盖段落交给同一 Explorer agent 补探索。覆盖率 25%→33.3%，新增 5 条工具确认规则。分母包括标题和说明段，且一段可能有多个约束，因此该数字既不是“可执行规则召回率”，也不是 policy 完整性证明；未覆盖及未进一步确认的内容仍显式保留。生产包不再导出或引用模板编译器；网关地址由进程环境注入，轨迹与主 world model 分离。
 

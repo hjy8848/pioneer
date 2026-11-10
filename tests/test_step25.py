@@ -1,9 +1,16 @@
 """[INDEPENDENT] Production API, template isolation, public config and coverage."""
 import ast
 import json
+import pytest
 
 from pioneer.paths import REPO_ROOT
 from pioneer.explorer.coverage import policy_coverage, save_world_model
+
+
+def forbidden_test_import(node):
+    modules = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""] if isinstance(node, ast.ImportFrom) else []
+    return any(name.split(".")[0] in {"tests", "helpers"} or name.split(".")[0].startswith("legacy_")
+               for name in modules)
 
 
 def test_public_api_and_no_production_templates():
@@ -13,12 +20,22 @@ def test_public_api_and_no_production_templates():
     for path in (REPO_ROOT / "src").rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
+            assert not forbidden_test_import(node), path
             names = []
             if isinstance(node, ast.Name):
                 names.append(node.id)
             elif isinstance(node, ast.ImportFrom):
                 names.extend(alias.name for alias in node.names)
             assert not any(n == "rule_catalog" or n.startswith("_legacy_") for n in names), path
+
+
+@pytest.mark.parametrize("code,blocked", [
+    ("import tests", True), ("import tests.helpers.legacy_rules as rules", True),
+    ("from tests.helpers.legacy_build import build_knowledge", True),
+    ("from pioneer.explorer import ExplorerAgent", False),
+])
+def test_static_check_recognizes_both_import_forms(code, blocked):
+    assert forbidden_test_import(ast.parse(code).body[0]) is blocked
 
 
 def test_policy_coverage_leaves_unmapped_text_visible():

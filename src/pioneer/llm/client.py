@@ -53,9 +53,12 @@ class LiteLLMClient:
     def json(self, messages):
         return json.loads(self._request(messages, response_format={"type": "json_object"})["content"])
 
-    def chat(self, messages, tools):
+    def chat(self, messages, tools=None, seed=None):
         """[INDEPENDENT] Cache native tool-use messages, including tool calls."""
-        return self._request(messages, tools=tools, tool_choice="auto")
+        options = dict(tools=tools, tool_choice="auto") if tools else {}
+        if seed is not None:
+            options["seed"] = seed
+        return self._request(messages, **options)
 
 
 class MockLLM:
@@ -63,6 +66,8 @@ class MockLLM:
     def __init__(self, responses):
         self.responses = iter(responses)
         self.requests = []
+        self.params = dict(model="mock", seed=0)
+        self.records = []
         self.usage = dict(calls=0, cache_hits=0, prompt_tokens=0, completion_tokens=0,
                           cost_usd=0.0, unknown_cost_calls=0)
 
@@ -71,7 +76,7 @@ class MockLLM:
         self.usage["calls"] += 1
         return deepcopy(next(self.responses))
 
-    def chat(self, messages, tools):
+    def chat(self, messages, tools=None, seed=None):
         self.requests.append(deepcopy(dict(messages=messages, tools=tools)))
         self.usage["calls"] += 1
         return deepcopy(next(self.responses))

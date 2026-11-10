@@ -105,3 +105,11 @@ class TaskMeta(BaseModel):
     num_write_actions: int
     repair_rounds: int = 0
     verifier_report: Optional[VerifierReport] = None
+    # [INDEPENDENT] Machine-checkable provenance for E4/E5/E6. Expressions
+    # reference literal user text or selectors over actual READ tool outputs.
+    read_steps: list[dict] = Field(default_factory=list)
+    argument_bindings: dict[str, dict] = Field(default_factory=dict)
+    communicate_bindings: list[dict] = Field(default_factory=list)
+    refusal_requests: list[dict] = Field(default_factory=list)
+    ambiguity: Optional[dict] = None
+    requested_capability: Optional[str] = None

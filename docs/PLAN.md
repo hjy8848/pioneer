@@ -132,7 +132,9 @@
 
 ---
 
-### Step 3：Verifier（环境证据 + verifier agent）⬜
+### Step 3：Verifier（环境证据 + verifier agent）✅
+
+完成记录：已实现 E1–E9、工具驱动 VerifierAgent、READ 绑定数据契约及 CLI。12 个失败码均有手工反例；全量离线测试 60 passed，1 条上游弃用警告。真实 qwen3.7-max 写/只读样例各 k=2，修正结束条件后的写样例和只读样例均 reward=1/1。初始写样例因 user simulator 提前 STOP 得 0/0，正确拒绝并保留失败轨迹。仅 E8 单题估算：写 $0.228189、只读 $0.274423；含 agent 诊断和原始失败尝试的本步骤总估算 $1.143666。真实轨迹由最终程序再次评分，结果一致且未新增模型调用。详见 docs/VERIFIER.md 与 reports/step3_validation.json。
 
 **博客原文：** "A task joins the dataset only once we can establish that its reference outcome is actually reachable and that it is the outcome the policy calls for." Verifier 是博客列出的 LLM 角色之一。
 

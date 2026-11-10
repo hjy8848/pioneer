@@ -163,6 +163,7 @@
 **测试：**
 - `FailureCode` 中的每个失败码都至少有一个手工构造的反例，只能用自己构造的数据。
 - 验证 agent 无法让未通过证据检查的任务入库。
+- **补强静态隔离检查**（Step 2.5 review）：现有检查只匹配 `rule_catalog` 和 `_legacy_*` 这两种名字，但 helpers 模块名是 `legacy_build`、`legacy_rules`，而且 `import tests.helpers...` 这种写法完全检查不到。新增一条：`src/` 下任何文件都不得 `import tests` 或 `from tests... import`，`ast.Import` 和 `ast.ImportFrom` 都要检查。
 
 **回报内容：** 每个失败码的测试结果；E8 的单题花费。
 
@@ -226,6 +227,8 @@
    - policy 规则的命中情况。
 
    追踪器把缺口写进 Evolver 的输入，引导下一代出题方向。
+   - **段落内子条款的缺口**（Step 2.5 review）：policy 覆盖是按段落统计的，一段里可能有好几个约束。目前已知两个子条款没有对应规则：「换货或改商品必须是同一商品类型」（例如不能把衬衫换成鞋子）和「新 item 必须有货」。这两条都由工具执行，所以入库判定不受影响（E1 和 E5 接受工具拒绝作为证据）。但 Evolver 是照着 world model 出题的，没有这两条，就容易漏掉对应的 `POLICY_PUSHBACK` 类题。
+   - 做法：让追踪器把「policy 中有、但 world model 中没有对应规则的子条款」也列为缺口。如果第一次小规模运行后，这两类题的数量为 0，就先让 Explorer agent 针对这两条做一次补探索：自己构造正反例探针，确认通过后才加入 world model。不要手写规则。
 4. **`structure_signature`：** 用于统计和去重。
 
 **测试：** 用 MockLLM 跑 2 代。

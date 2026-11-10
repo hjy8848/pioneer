@@ -237,6 +237,55 @@
 
 ---
 
+### Step 4.5：Step 4 review 跟进项，并补完 Step 4 ⬜
+
+以下几项来自对 `f85a82e` 的 review。按顺序执行：先完成第 1、2、3 项，再补齐剩余的 7 类原子动作（第 4 项）。如果先补题，补出来的题仍然依赖手写的领域规则，还得重做。
+
+1. **Initializer 的 prompt 不能写死领域规则（违反博客原文和 AGENTS 规则 0）。**
+   - 博客原文："The recipe never needs to know what your domain is. It talks to the environment through six functions"。
+   - 现状：`initializer/agent.py` 的 `SYSTEM` 中写死了 Retail 的业务知识，例如：
+     - 「换货或改商品时选同一商品的有货 variant」。
+     - 「礼品卡余额必须够付差价」。
+     - 「退货必须退到原支付方式或礼品卡」。
+     - 「订单 ID 和商品 ID 可以出现在用户剧本里」。
+     - 「用卡号后四位区分支付方式」。
+
+     这些属于人手写的领域知识，绕过了 world model。到 Step 8、9 换领域时，还得为每个领域重写一遍。
+   - 改法：
+     - `SYSTEM` 只保留与领域无关的内容：agent 的角色、工具协议、Task / TaskMeta 的格式、证据表达式语法、「先查环境再提交」「必须包含等待完成句」等通用要求。
+     - 业务约束一律由 payload 提供，来源只能是 `get_metadata()`（policy、工具 schema）和 world model（已确认的 rules、actions 的 requires / failure_modes）。
+     - 「哪些 ID 不能出现在用户剧本里」不能手写清单，要从 schema 和工具签名推导。例如：凡是 agent 必须通过 READ 工具查到的内部 ID 参数，都视为禁止泄露。在 FIDELITY 中登记推导规则。
+     - 同样检查 Explorer：`explorer/agent.py` 中 "Retail Explorer agent" 的提法，以及写死的 `collections` 枚举（users / orders / products / variants），都要改为从环境的 metadata 获取。Explorer 已经产出的 world model 不需要重跑。
+     - 增加一个静态测试：`src/pioneer/{explorer,initializer,evolver,verifier}` 中，prompt 字符串不得包含领域名词，例如 `retail`、`gift card`、`order`、`variant`、`paypal`。领域名词只能出现在 `env/` 适配层和 world model 数据中。如果确实需要例外，在测试中列出白名单并说明理由。
+2. **记录预检失败，避免首轮通过率虚高。**
+   - 现状：Initializer 在 `submit_candidate` 时先跑 E1–E7、E9 预检，不通过就在同一次生成里修改，所以报告显示 11/11 首轮通过、返工 0 次。真实的修改过程没有体现在统计里。
+   - 改法：
+     - 记录每次 `submit_candidate` 的结果：预检是否通过，以及失败码。
+     - 报告中增加：每道入库题平均经历的预检失败次数；预检失败码的分布；「一次提交就通过预检」的比例。
+     - Step 6 统计「首轮 / 返工后通过率」时，要同时给出两种口径：只算 Verifier 的外层返工，以及把预检修改也算作返工。
+     - 预检保留，它能节省 E8 的花费。在 FIDELITY 中登记：Initializer 可以调用确定性证据工具做自检，属于 `[INDEPENDENT]`。
+3. **提高实体多样性。**
+   - 现状：11 道题里，同一用户的同一订单被多道题重复使用（例如 #W2974929 同时用于「取消」和「改地址」；#W2631563 出了两道几乎相同的改地址题）。原因是 agent 习惯直接用查询返回的前几个结果。
+   - 改法：
+     - 程序根据场景的实体约束，用 `query_data` 查出全部符合条件的实体，按 seed 随机抽取一个候选池（例如 20 个）交给 agent。agent 仍然可以自己查询，但必须优先从候选池中选择。
+     - 全局记录每个用户和订单已被使用的次数。同一个 (原子动作, 订单) 组合不得出现在两道题里；同一个用户在同一批中最多出现 k 次（默认 k=2）。
+     - 这个约束交给 Step 5 的追踪器继续沿用。在 FIDELITY 中登记为 `[INDEPENDENT]`。
+4. **补齐剩余 7 类原子动作。**
+   - 退货、转人工，以及 5 类查询（用户、订单、商品、item、商品类型）目前候选数为 0。它们还没有被执行过，不能据此判断这几类题难不难出。
+   - 第 1–3 项完成后，按每类 3 题补齐。查询类和转人工类会首次在真实模型上走 COMMUNICATE 和 E5 的路径，要特别留意这两类的失败码。
+   - 已入库的 11 题保留，不需要重做；但要用第 3 项的规则检查一遍。如果有违反（例如同一 (原子动作, 订单) 出现两次），按规则只保留其中一题，并在报告中写明。
+5. **小问题：** 把 `data/knowledge/depth0_partial.jsonl` 移到 `data/runs/` 下。`data/knowledge/` 只放 world model。
+
+**回报内容：**
+- 改动后 Initializer 和 Explorer 的 `SYSTEM` 全文（应当不含领域名词）。
+- 领域名词静态测试的结果。
+- 13 类原子动作各自的候选数和通过数。
+- 预检失败的统计。
+- 实体重复使用的统计。
+- 每道入库题的平均花费，拆成生成、验证、返工三部分；以及推算到 600 题的总花费。
+
+---
+
 ### Step 5：Evolver agent + 全局覆盖追踪器 ⬜
 
 **博客原文：** "Each generation takes existing scenarios and applies evolution stressors to produce harder descendants: more actions chained together, more entities involved, and more of the interaction-level and reasoning-level difficulty a real user brings, such as pushing back on policy, asking for something conditional, or under-specifying a request. A global tracker watches what has already been covered and steers each generation toward what hasn't, including outcomes where the correct behavior is to say no."

@@ -171,7 +171,9 @@
 
 ---
 
-### Step 3.5：Step 3 review 跟进项 ⬜（在 Step 4 开始时一并完成）
+### Step 3.5：Step 3 review 跟进项 ✅
+
+完成记录：E9 不再按结构签名拒绝，seen_structure 仅写入统计；实例签名由 actions 名称/参数、initial_state、stressor 集合、expected_outcome、communicate_info 计算，不含剧本文字。已加入同结构不同实例可通过、同结果改写措辞仍判重的测试。Initializer 必含清单已有固定的等待完成句；不采用额外 ART checklist。本步未调用模型，新增花费 $0。
 
 以下几项来自对 `0053e67` 的 review。
 

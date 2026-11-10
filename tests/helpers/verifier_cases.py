@@ -14,10 +14,11 @@ def read(step, path=""):
     return dict(source="read", step=step, path=path)
 
 
-def candidate(status="pending", holdout=()):
+def candidate(status="pending", holdout=(), exclude_orders=()):
     env = RetailSynthEnv()
     env.init()
-    order = env.query_data("orders", [("status", "eq", status), ("user_id", "not_in", list(holdout))], limit=1)[0]
+    order = env.query_data("orders", [("status", "eq", status), ("user_id", "not_in", list(holdout)),
+                                      ("order_id", "not_in", list(exclude_orders))], limit=1)[0]
     user = env.query_data("users", [("user_id", "eq", order["user_id"])])[0]
     task = Task(id="handcrafted-cancel", user_scenario=UserScenario(instructions=StructuredUserInstructions(
         domain="retail", reason_for_call="Cancel my pending order: no longer needed.",

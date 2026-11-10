@@ -14,9 +14,11 @@
 | E6 | 对声明的初始筛选与澄清筛选执行查询，候选数必须从大于 1 变成 1；无歧义任务记 applicable=false |
 | E7 | 构造参考 SimulationRun，经原生 ALL evaluator 评分为 1；不调用 NL_ASSERTION |
 | E8 | 两次原生对话；有动作时 llm_agent_gt，actions=[] 时 llm_agent；user_simulator 共用配置模型；重新原生评分，至少一次为 1 |
-| E9 | 从内容计算结构/实例签名，检查给定任务池和官方派生签名；涉及 holdout 用户的目标、身份及初始化变更都会拒绝 |
+| E9 | 实例签名与官方派生签名用于判重，结构签名仅统计；涉及 holdout 用户的目标、身份及初始化变更都会拒绝 |
 
-如果 E1–E7 或 E9 已失败，E8 记为 blocked，不继续花费模型调用，任务仍不能通过。正式入口默认读取 Step 1 派生的 holdout 用户与签名，缺失时需要先运行 build_holdout。新任务池的 seen_structure / seen_instance 由后续流水线显式传入；不会用调用者提供的字符串冒充已计算签名。
+如果 E1–E7 或 E9 已失败，E8 记为 blocked，不继续花费模型调用，任务仍不能通过。正式入口默认读取 Step 1 派生的 holdout 用户与签名，缺失时需要先运行 build_holdout。新任务池的 seen_instance 由流水线传入；seen_structure 只记统计。不会用调用者提供的字符串冒充已计算签名。
+
+Step 3.5 修正：实例签名仅包含参考 actions 的名称与参数、initial_state、stressor 集合、expected_outcome、communicate_info，不含自然语言剧本或 action_id。同结构的不同实例允许入库；仅改写剧本不会绕过实例去重。这一修正覆盖了原 PLAN 中按结构去重的不合理限制。
 
 `[OFFICIAL]` 环境执行、DB hash、runner、评分全部复用固定 τ²。`[BLOG]` Verifier agent 收集证据和诊断，环境决定是否入库。检查协议、JSON 格式、READ 绑定、签名和角色适配为 `[INDEPENDENT]`。
 

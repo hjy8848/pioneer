@@ -79,7 +79,7 @@ def test_failure_code_counterexamples(code, knowledge, monkeypatch):
         assert code in report.failure_codes and not report.passed
         return
     elif code == FailureCode.DUPLICATE:
-        options["seen_structure"] = [task_signatures(task, meta)[0]]
+        options["seen_instance"] = [task_signatures(task, meta)[1]]
     elif code == FailureCode.HOLDOUT_LEAK:
         options["holdout"] = [user["user_id"]]
     report = engine(knowledge, **options).evaluate(task, meta)
@@ -141,14 +141,35 @@ def test_official_signature_overlap_is_rejected(knowledge):
     assert FailureCode.DUPLICATE in report.failure_codes
 
 
-def test_instance_signature_ignores_stressor_labels_and_action_ids():
+def test_instance_signature_ignores_action_ids_but_includes_stressors():
     task, meta, *_ = candidate()
     original = task_signatures(task, meta)
-    meta.stressors = [Stressor.REASONING]
     task.evaluation_criteria.actions[0].action_id = "renamed"
+    assert original == task_signatures(task, meta)
+    meta.stressors = [Stressor.REASONING]
     changed = task_signatures(task, meta)
     assert original[0] != changed[0]
-    assert original[1] == changed[1]
+    assert original[1] != changed[1]
+
+
+def test_same_structure_different_instances_are_both_admitted(knowledge):
+    first, first_meta, first_order, _ = candidate()
+    second, second_meta, *_ = candidate(exclude_orders=[first_order["order_id"]])
+    structure, instance = task_signatures(first, first_meta)
+    assert engine(knowledge).evaluate(first, first_meta).passed
+    report = engine(knowledge, seen_structure=[structure], seen_instance=[instance]).evaluate(second, second_meta)
+    assert report.passed, report.model_dump()
+    assert next(c for c in report.checks if c.name == "E9").details["structure_seen"]
+
+
+def test_paraphrased_script_does_not_create_a_new_instance(knowledge):
+    task, meta, *_ = candidate()
+    signature = task_signatures(task, meta)[1]
+    task.user_scenario.instructions.reason_for_call = "I do not need this order any longer: no longer needed. Please cancel it."
+    task.user_scenario.instructions.task_instructions += " Please be polite."
+    assert task_signatures(task, meta)[1] == signature
+    report = engine(knowledge, seen_instance=[signature]).evaluate(task, meta)
+    assert FailureCode.DUPLICATE in report.failure_codes
 
 
 def test_verifier_agent_cannot_override_failed_evidence(knowledge):

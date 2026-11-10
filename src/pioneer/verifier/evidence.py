@@ -20,9 +20,9 @@ def task_signatures(task, meta):
     actions = task.evaluation_criteria.actions or []
     structure = digest(dict(tools=[a.name for a in actions], stressors=sorted(s.value for s in meta.stressors),
                             outcome=meta.expected_outcome.value))
-    instance = digest(dict(actions=[dict(name=a.name, requestor=a.requestor, arguments=a.arguments) for a in actions],
+    instance = digest(dict(actions=[dict(name=a.name, arguments=a.arguments) for a in actions],
                            initial_state=task.initial_state.model_dump(mode="json") if task.initial_state else None,
-                           user=task.user_scenario.model_dump(),
+                           stressors=sorted({s.value for s in meta.stressors}), expected_outcome=meta.expected_outcome.value,
                            communicate=task.evaluation_criteria.communicate_info))
     return structure, instance
 
@@ -224,10 +224,10 @@ class EvidenceEngine:
                 involved.add(initial["db"]["orders"].get(key, base.state()["db"]["orders"].get(key, {})).get("user_id"))
         structure, instance = task_signatures(task, meta) if criteria else ("invalid", "invalid")
         sequence = tuple(a.name for a in actions if tool_types.get(a.name) == "write")
-        duplicate = structure in self.seen_structure or instance in self.seen_instance or any((u, sequence) in self.official_signatures for u in involved)
+        duplicate = instance in self.seen_instance or any((u, sequence) in self.official_signatures for u in involved)
         leaked_users = sorted(self.holdout & involved)
         add("E9", not duplicate and not leaked_users, dict(structure_signature=structure, instance_signature=instance,
-            duplicate=duplicate, holdout_users=leaked_users),
+            duplicate=duplicate, structure_seen=structure in self.seen_structure, holdout_users=leaked_users),
             ([FailureCode.DUPLICATE] if duplicate else []) + ([FailureCode.HOLDOUT_LEAK] if leaked_users else []))
         if all(c.passed for c in checks):
             before_usage = dict(self.llm.usage) if self.llm else {}

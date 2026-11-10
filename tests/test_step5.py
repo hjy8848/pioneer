@@ -263,6 +263,46 @@ def test_communicate_binding_is_matched_ignoring_case_like_the_native_evaluator(
     assert task.evaluation_criteria.communicate_info != [order["status"]]
 
 
+def test_client_retries_gateway_hiccups_but_not_other_errors(tmp_path, monkeypatch):
+    import litellm
+    from types import SimpleNamespace
+    from pioneer.llm import LiteLLMClient
+
+    class InternalServerError(Exception):
+        pass
+
+    class BadRequestError(Exception):
+        pass
+
+    reply = SimpleNamespace(usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, model_dump=lambda: {}),
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", model_dump=lambda exclude_none=True: {"content": "ok"}))],
+        _hidden_params={"response_cost": 0.0})
+    script = [InternalServerError("Connection error"), InternalServerError("Connection error"), reply]
+    sleeps = []
+
+    def completion(**kwargs):
+        item = script.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(litellm, "completion", completion)
+    monkeypatch.setattr("time.sleep", sleeps.append)
+    client = LiteLLMClient("m", 0, 0, tmp_path, backoff=30)
+    assert client.chat([{"role": "user", "content": "hi"}])["content"] == "ok"
+    assert sleeps == [30, 60] and client.usage["calls"] == 1  # two retries, one billed call
+
+    script[:] = [BadRequestError("bad")]
+    sleeps.clear()
+    with pytest.raises(BadRequestError):
+        client.chat([{"role": "user", "content": "other"}])
+    assert sleeps == []  # not a transient error: no retry
+
+    script[:] = [InternalServerError("down")] * 3
+    with pytest.raises(InternalServerError):
+        LiteLLMClient("m", 0, 0, tmp_path, retries=2, backoff=1).chat([{"role": "user", "content": "third"}])
+
+
 # -- pipeline control flow ------------------------------------------------------------------------
 class FakeClient:
     def __init__(self, **params):

@@ -118,7 +118,8 @@ def main():
                         llm_usage=dict(client.usage), initializer_trace=initializer.trace,
                         preflight_submissions=initializer.submissions))
                     print(f"{cid} {diagnosis}", flush=True)
-                    if type(exc).__name__ in {"RateLimitError", "AuthenticationError", "APIConnectionError"}:
+                    if type(exc).__name__ in {"RateLimitError", "AuthenticationError", "APIConnectionError",
+                                              "InternalServerError", "ServiceUnavailableError", "BadGatewayError"}:
                         raise
             if cid not in complete:
                 queued.append(dict(candidate_id=cid, scenario=scenario.model_dump(mode="json"), previous=previous, diagnosis=diagnosis))

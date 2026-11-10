@@ -12,7 +12,9 @@ from pioneer.llm import LiteLLMClient
 from pioneer.paths import HOLDOUT_DIR
 from pioneer.verifier import verify
 
-FATAL = {"RateLimitError", "AuthenticationError", "APIConnectionError"}
+# After the client's own retries these mean the gateway is down: stop instead of burning rounds.
+FATAL = {"RateLimitError", "AuthenticationError", "APIConnectionError", "InternalServerError",
+         "ServiceUnavailableError", "BadGatewayError"}
 
 
 def run_rounds(scenario, candidate_id, *, knowledge, params, verifier_cfg, seed_instances, append,

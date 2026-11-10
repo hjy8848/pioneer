@@ -85,6 +85,7 @@
   - 写任务：最终 hash 不等于初始 hash，且 DB diff 只落在参考动作涉及的实体上。
   - 无写动作的任务：`actions` 必须是 `[]`，并且 `communicate_info` 可以由 `query_data` 算出。
 - **V4 信息充分** `[INDEPENDENT]`：参考动作的每个参数，都要能从 `known_info` 出发，经 agent 可用的 READ 工具链唯一确定。同时检查指令里没有泄露 item_id 或 payment id。
+  - **身份必须唯一（Step 1 review 补充）：** v1.0.1 的 `find_user_id_by_name_zip` 遇到同名同邮编时，会静默返回第一个匹配（v2.0.0 才改成报 `User lookup is ambiguous`，见 AUDIT §5）。如果 known_info 用「姓名 + 邮编」认证，必须在 DB 中只匹配到一个用户，否则判 `ARG_NOT_DERIVABLE`。邮箱同样要检查唯一性。
 - **V5 拒绝类结果** `[BLOG]`：
   - 被禁止的请求在沙盒副本中执行时，要么被工具拒绝，要么违反 V2。
   - 参考结果为 `[]`，或只执行合规部分。
@@ -93,6 +94,7 @@
 - **V7 官方评分** `[OFFICIAL]`：用参考动作构造 SimulationRun，经 `reward()` 评分，结果必须为 1。
 - **V8 去重与隔离：** 结构签名和实例签名都不重复；不涉及 holdout 用户；与官方任务签名无重叠。
 - **V9（可选，较贵）端到端可达** `[INDEPENDENT]`：用 `run()` 跑 `llm_agent_gt` + user simulator k=2 次，至少一次 reward=1。判定依据是环境 reward，不是 LLM 的意见。
+  - **适用范围（Step 1 review 补充）：** 原生 `LLMGTAgent.check_valid_task` 要求至少一条参考动作，`actions=[]` 的任务（refuse / inform）无法运行。V9 只对含写动作或 `transfer_to_human_agents` 的任务执行；其余任务在报告中记为 `V9: n/a`，统计时单独列出，不能算作「已通过端到端验证」。
 
 **diagnosis：** 由程序生成结构化原因（哪一步、哪条规则、哪个参数）。LLM 只能把它改写成可读文字，不能改变判定。
 
@@ -111,7 +113,8 @@
    - 填写 `evaluation_criteria`：
      - `actions`：写动作列表，或 `[]`。
      - `communicate_info`。
-     - `reward_basis`：只能是 `[DB]` 或 `[DB, COMMUNICATE]`。
+     - `reward_basis`：只能是 `[DB]` 或 `[DB, COMMUNICATE]`，并且必须按这个顺序输出。`RetailSynthEnv._validate_criteria` 是按列表比较的，`[COMMUNICATE, DB]` 会被拒绝；也可以把它改成按集合比较，二选一，但要在 commit 里写明（Step 1 review 补充）。
+   - 用「姓名 + 邮编」作为身份信息前，先用 `query_data` 确认它在 DB 中只对应一个用户；不唯一就改用邮箱，邮箱同样要唯一（Step 1 review 补充，原因见 Step 3 的 V4）。
 2. **修复循环** `[BLOG]`：根据失败码选择修复策略（重新采样实体、补全 known_info、去掉泄露的 ID、调整参数、退回场景层重写），最多 3 轮。
    - 每一轮都写入 `repair_log`。
    - 3 轮仍失败才记为 dropped，并保留失败原因。

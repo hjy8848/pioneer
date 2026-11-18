@@ -16,6 +16,7 @@ def main():
                         help="batch root whose shards/*/candidates.jsonl define already-used entities (default: --out)")
     parser.add_argument("--known-tasks", type=Path,
                         help="jsonl of {task, meta} admitted earlier; counted for entity reuse limits only")
+    parser.add_argument("--config", type=Path, default=REPO_ROOT / "configs/retail.yaml")
     args = parser.parse_args()
     os.environ.setdefault("TAU2_DATA_DIR", str(TAU2_DATA_DIR))
     os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
@@ -26,7 +27,7 @@ def main():
     from pioneer.env import RetailSynthEnv
     from pioneer.initializer.diversity import EntityLedger
     from pioneer.stats.ledger import summarize_ledger
-    config = yaml.safe_load((REPO_ROOT / "configs/retail.yaml").read_text(encoding="utf-8"))
+    config = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     load = lambda path: json.loads(path.read_text(encoding="utf-8"))
     knowledge = load(REPO_ROOT / "data/knowledge/retail_world_model.json")
     params = dict(config["llm"], seed=config["seed"], cache_dir=REPO_ROOT / config["llm"]["cache_dir"],
@@ -126,7 +127,7 @@ def main():
             (args.out / "depth0.jsonl").write_text("".join(json.dumps(dict(task=r["task"], meta=r["meta"]), ensure_ascii=False)+"\n" for r in accepted), encoding="utf-8")
             (args.out / "rework_queue.json").write_text(json.dumps(queued, ensure_ascii=False, indent=2), encoding="utf-8")
     summary = summarize_ledger(history, atoms, requested=len(atoms) * count)
-    summary["rework_queue"] = len(queued)
+    summary.update(rework_queue=len(queued), model=config["llm"]["model"], config=str(args.config))
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary), flush=True)
 

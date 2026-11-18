@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--only", nargs="+", help="restrict to these atomic actions (default: all in the world model)")
     parser.add_argument("--known-tasks", type=Path,
                         help="jsonl of {task, meta} admitted earlier; counted for entity reuse limits only")
+    parser.add_argument("--config", type=Path, default=REPO_ROOT / "configs/retail.yaml")
     args = parser.parse_args()
     if not 1 <= args.workers <= 4:
         raise ValueError("workers must be 1..4")
@@ -45,7 +46,7 @@ def main():
             log = (folder / "run.log").open("a", encoding="utf-8")
             command = [sys.executable, str(REPO_ROOT / "scripts/initialize.py"),
                 "--out", str(folder.resolve()), "--atomic", atom, "--n", str(args.n),
-                "--ledger-root", str(args.out.resolve())]
+                "--ledger-root", str(args.out.resolve()), "--config", str(args.config.resolve())]
             if args.known_tasks:
                 command += ["--known-tasks", str(args.known_tasks.resolve())]
             process = subprocess.Popen(command,
@@ -84,7 +85,7 @@ def main():
             unique.append(row)
     stat_rows = [dict(r, passed=False) if id(r) in demoted else r for r in records]
     summary = summarize_ledger(stat_rows, atoms, requested=len(atoms) * args.n)
-    summary.update(rework_queue=len(queue), jobs=jobs)
+    summary.update(rework_queue=len(queue), jobs=jobs, config=str(args.config))
     (args.out / "depth0.jsonl").write_text("".join(json.dumps(dict(task=r["task"],meta=r["meta"]),ensure_ascii=False)+"\n" for r in unique),encoding="utf-8")
     (args.out / "rework_queue.json").write_text(json.dumps(queue,ensure_ascii=False,indent=2),encoding="utf-8")
     (args.out / "summary.json").write_text(json.dumps(summary,indent=2),encoding="utf-8")

@@ -1,0 +1,42 @@
+# Same as retail.yaml except the shared model (comparison run, see scripts/initialize_batch.py --config).
+domain: retail
+seed: 0
+
+tau2:
+  tag: v1.0.1
+  commit: fc0055dc4e0a316c3f83133267fbd6faaa770992
+
+llm:
+  # One backbone for all synthesis roles, as in the blog (model is our choice; blog's is unnamed).
+  model: openai/qwen3.8-27b  # lab-hosted 27B on the gateway; RSI candidate: can a model this size run the synthesis roles?
+  temperature: 0.0
+  max_tokens: 16000
+  timeout: 600              # seconds per request; qwen3.7-plus often exceeds the old 120 s default
+  cache_dir: data/cache/llm
+
+user_simulator:
+  model: same_as_llm        # [BLOG] one frontier model for all LLM roles, incl. user simulator
+  temperature: 0.0
+
+evolution:
+  max_depth: 4
+  max_tasks_per_user: 8      # a family of descendants shares its parent's user, so the depth-0 limit of 2 does not apply
+  generations: 5
+  candidates_per_generation: 20
+  depth0_per_atomic_action: 3
+  stressors: [chain, multi_entity, policy_pushback, conditional, underspecified, reasoning]
+
+rework:
+  rounds_per_batch: 5       # [INDEPENDENT] budget; unrepaired tasks go to rework_queue, not dropped
+
+diversity:                   # [INDEPENDENT] PLAN Step 4.5 item 3
+  max_tasks_per_user: 2      # per batch; the same (atomic action, entity) pair is never reused
+  pool_size: 20              # seeded sample of eligible unused entities handed to the Initializer
+
+verifier:
+  e2e_reachability: true    # E8, required (PLAN Step 3)
+  e2e_trials: 2
+
+reward_basis_allowed: [[DB], [DB, COMMUNICATE]]
+checkpoint_verified_tasks: 50    # PLAN Step 6: pause for human review here
+target_verified_tasks: 600       # [BLOG] "roughly 600 verified tasks per domain"

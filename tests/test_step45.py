@@ -115,3 +115,49 @@ def test_initializer_logs_every_submission(tmp_path):
     agent.run(Scenario(scenario_id="s", intents=[Intent(atomic_action="cancel_pending_order")],
                        expected_outcome=ExpectedOutcome.COMPLETE), "cid")
     assert [s["stage"] for s in agent.submissions] == ["contract", "accepted"]
+
+
+def test_review_submission_with_wrong_shape_is_returned_to_the_agent(tmp_path):
+    """A list where an object is expected used to crash the whole Explorer run (AttributeError)."""
+    holdout = tmp_path / "h.json"
+    holdout.write_text("[]")
+    agent = ExplorerAgent(MockLLM([]), holdout).continue_from(WORLD)
+    with pytest.raises(ValueError, match="must be an object"):
+        agent.complete_review(new_claims={"cancel_pending_order": [{"text": "x", "evidence": []}]})
+    with pytest.raises(ValueError, match="unknown tool"):
+        agent.complete_review(new_claims={"teleport": {"requires": []}})
+    with pytest.raises(ValueError, match="must be an object"):
+        agent.complete_review(new_claims=[{"text": "x"}])
+
+
+def _probe_agent(tmp_path, env):
+    holdout = tmp_path / "h.json"
+    holdout.write_text("[]")
+    agent = ExplorerAgent(MockLLM([]), holdout)
+    status = {"collection": "orders", "where": [["order_id", "eq", {"ref": "args.order_id"}], ["status", "eq", "pending"]]}
+    agent.probes["status"] = dict(rule_id="status", tools=["cancel_pending_order"], text="pending", check=status,
+                                  per_item=False, level="state", classification="confirmed_by_tool")
+    pending = env.query_data("orders", [("status", "eq", "pending")], limit=1)[0]["order_id"]
+    delivered = env.query_data("orders", [("status", "eq", "delivered")], limit=1)[0]["order_id"]
+    return agent, status, pending, delivered
+
+
+def test_probe_rejects_a_check_identical_to_an_accepted_rule(tmp_path, env):
+    """Seen in the 2026-11-20 review: rules named 'refund to original payment' etc. reused the status check."""
+    agent, status, pending, delivered = _probe_agent(tmp_path, env)
+    case = lambda oid: dict(arguments=dict(order_id=oid, reason="no longer needed"))
+    with pytest.raises(ValueError, match="identical to accepted rule"):
+        agent.probe("refund_rule", "cancel_pending_order", "refund goes to the original method", status,
+                    case(pending), case(delivered))
+
+
+def test_probe_negative_case_must_satisfy_the_accepted_rules(tmp_path, env):
+    agent, status, pending, delivered = _probe_agent(tmp_path, env)
+    reason = {"compare": [{"ref": "args.reason"}, "in", ["no longer needed", "ordered by mistake"]]}
+    good = dict(arguments=dict(order_id=pending, reason="no longer needed"))
+    with pytest.raises(ValueError, match="also violates accepted rule"):  # rejected because not pending, not because of the reason
+        agent.probe("reason", "cancel_pending_order", "reason must be allowed", reason,
+                    good, dict(arguments=dict(order_id=delivered, reason="bored")))
+    record = agent.probe("reason2", "cancel_pending_order", "reason must be allowed", reason,
+                         good, dict(arguments=dict(order_id=pending, reason="bored")))
+    assert record["classification"] == "confirmed_by_tool"

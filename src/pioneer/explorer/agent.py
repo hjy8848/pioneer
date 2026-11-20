@@ -114,7 +114,15 @@ class ExplorerAgent:
     def complete_review(self, new_claims=None, conversation_rules=None, paragraph_explanations=None):
         from copy import deepcopy
         actions = deepcopy(self.seed["actions"])
+        # Shape errors go back to the agent as ValueError instead of crashing the run.
+        if not isinstance(new_claims or {}, dict):
+            raise ValueError("new_claims must be an object {tool: {requires: [...], failure_modes: [...]}}")
         for tool, kinds in (new_claims or {}).items():
+            if tool not in actions:
+                raise ValueError(f"new_claims names unknown tool {tool!r}")
+            if not isinstance(kinds, dict):
+                raise ValueError(f"new_claims[{tool!r}] must be an object {{requires: [...], failure_modes: [...]}}, "
+                                 f"not a {type(kinds).__name__}")
             for kind, claims in kinds.items():
                 if kind not in {"requires", "failure_modes"}:
                     raise ValueError("review can add only evidenced conditions/failures")
@@ -187,11 +195,30 @@ class ExplorerAgent:
             raise ValueError(f"check hard-codes entity identifiers {hard_coded}; express them with refs so the rule "
                              "holds for every entity, not just this probe case")
         rule = dict(rule_id=rule_id, tools=[tool], text=text, check=check, per_item=per_item, level="state")
+        # [INDEPENDENT] The text of a rule is the model's; only its check is tested. Two ways a
+        # probe can confirm something other than what the text claims are rejected here.
+        accepted = [r for r in self.probes.values() if tool in r["tools"] and r.get("level", "state") == "state"
+                    and r["classification"] in {"confirmed_by_tool", "policy_only"}]
+        same = [r["rule_id"] for r in accepted if r["check"] == check and bool(r.get("per_item")) == bool(per_item)]
+        if same:
+            raise ValueError(f"check is identical to accepted rule {same}; write a check for the condition the text "
+                             "claims, using refs to the entities and arguments it is about")
         records = []
         for compliant, case in ((True, positive), (False, negative)):
             env = self.case(tool, **case)
             if check_rule(env, rule, case["arguments"]) != compliant:
                 raise ValueError("predicate must pass positive and fail negative BEFORE execution")
+            if not compliant:
+                also = []
+                for other in accepted:
+                    try:
+                        if not check_rule(env, other, case["arguments"]):
+                            also.append(other["rule_id"])
+                    except (ValueError, KeyError, TypeError, IndexError, StopIteration):
+                        pass  # not evaluable on this case: no evidence either way
+                if also:
+                    raise ValueError(f"the negative case also violates accepted rule(s) {also}, so its rejection would "
+                                     "not show the new condition; make the negative case satisfy them")
             result = env.execute(tool, case["arguments"])
             records.append(dict(compliant=compliant, case=case, execution=asdict(result)))
         label = ("contradicted" if not records[0]["execution"]["ok"] else

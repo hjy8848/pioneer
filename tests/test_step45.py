@@ -161,3 +161,11 @@ def test_probe_negative_case_must_satisfy_the_accepted_rules(tmp_path, env):
     record = agent.probe("reason2", "cancel_pending_order", "reason must be allowed", reason,
                          good, dict(arguments=dict(order_id=pending, reason="bored")))
     assert record["classification"] == "confirmed_by_tool"
+
+
+def test_review_claims_must_be_objects(tmp_path):
+    holdout = tmp_path / "h.json"
+    holdout.write_text("[]")
+    agent = ExplorerAgent(MockLLM([]), holdout).continue_from(WORLD)
+    with pytest.raises(ValueError, match="must be objects"):
+        agent.complete_review(new_claims={"cancel_pending_order": {"requires": ["just a sentence"]}})

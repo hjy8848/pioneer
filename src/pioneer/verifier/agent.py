@@ -56,7 +56,7 @@ class VerifierAgent:
                         response = dict(passed=result.passed, failure_codes=[c.value for c in result.failure_codes])
                     else:
                         raise ValueError("unknown verifier tool")
-                except (ValueError, KeyError, TypeError, StopIteration) as exc:
+                except (ValueError, KeyError, TypeError, StopIteration, AttributeError) as exc:
                     response = dict(error=f"{type(exc).__name__}: {exc}")
                 messages.append(dict(role="tool", tool_call_id=call["id"], content=json.dumps(response, ensure_ascii=False)))
                 trace.append(dict(turn=turn, name=name, arguments=call["function"]["arguments"], response=response))

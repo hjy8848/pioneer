@@ -128,7 +128,7 @@ class EvolverAgent:
                         return draft
                     else:
                         raise ValueError("unknown Evolver tool")
-                except (ValueError, KeyError, TypeError, IndexError) as exc:
+                except (ValueError, KeyError, TypeError, IndexError, AttributeError) as exc:
                     response = dict(error=f"{type(exc).__name__}: {exc}")
                 self.trace.append(dict(turn=turn, name=name, arguments=call["function"]["arguments"], response=response))
                 messages.append(dict(role="tool", tool_call_id=call["id"], content=json.dumps(response, default=str)))

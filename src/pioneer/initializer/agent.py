@@ -241,7 +241,7 @@ class InitializerAgent:
                                 return task, meta
                     else:
                         raise ValueError("unknown Initializer tool")
-                except (ValueError, KeyError, TypeError, IndexError) as exc:
+                except (ValueError, KeyError, TypeError, IndexError, AttributeError) as exc:
                     response = dict(error=f"{type(exc).__name__}: {exc}")
                     if name == "submit_candidate":
                         self.submissions.append(dict(turn=turn, stage="contract", passed=False,

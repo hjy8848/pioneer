@@ -239,6 +239,9 @@ class ExplorerAgent:
                 if not isinstance(summary.get(kind), list):
                     raise ValueError("each action requires three claim lists")
                 for claim in summary[kind]:
+                    if not isinstance(claim, dict):
+                        raise ValueError(f"{tool}.{kind} entries must be objects {{text, evidence: [ids]}}, "
+                                         f"not a {type(claim).__name__}")
                     ids = claim.get("evidence", [])
                     if not claim.get("text") or not ids:
                         raise ValueError("every claim requires text and evidence IDs")
@@ -352,7 +355,7 @@ class ExplorerAgent:
                 try:
                     args = json.loads(call["function"]["arguments"])
                     response = self.dispatch(name, args)
-                except (ValueError, KeyError, TypeError, IndexError, StopIteration) as error:
+                except (ValueError, KeyError, TypeError, IndexError, StopIteration, AttributeError) as error:
                     response = {"error": f"{type(error).__name__}: {error}"}
                 messages.append(dict(role="tool", tool_call_id=call["id"], content=json.dumps(response, ensure_ascii=False)))
                 trace.append(dict(turn=turn, name=name, arguments=call["function"]["arguments"], error=response.get("error") if isinstance(response, dict) else None))

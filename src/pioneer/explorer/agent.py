@@ -16,6 +16,7 @@ from .rules import check_rule
 from .source import extract_tools, extract_models
 from .coverage import policy_coverage, save_world_model
 from .validation import collect_identifiers, instance_identifiers
+from .effects import observed_effects, schema_enums
 
 
 def function(name, description, properties, required=()):
@@ -290,11 +291,27 @@ class ExplorerAgent:
             active_tools = self.tools + [function("get_policy_coverage", "Inspect unmapped source paragraphs.", {}),
                 function("complete_policy_review", "Finish supplementary review. Supply new_claims mapping tool to requires/failure_modes claims referencing accepted probe IDs, optional added conversation_rules, and paragraph_explanations mapping every remaining uncovered paragraph ID to its reason. Existing actions and proofs are retained.",
                          {"new_claims": {"type": "object"}, "conversation_rules": {"type": "array"}, "paragraph_explanations": {"type": "object"}})]
+            # [INDEPENDENT] Gaps handed to the review come from the world model's own data: rules an
+            # earlier run had to discard, and the conditions the accepted rules already check.
+            redo = [{k: r.get(k) for k in ("rule_id", "tools", "text", "policy_quote")}
+                    for r in self.seed.get("discarded_rules", []) if r.get("classification") == "instance_specific"]
+            checked = {tool: [r["text"] for r in self.seed["rules"] if tool in r["tools"]]
+                       for tool in sorted(n for n, t in self.methods.items() if t.get("tool_type") == "write")}
+            effects = {tool: [e["effect"] for e in s.get("observed_effects", [])] for tool, s in self.seed["actions"].items()
+                       if s.get("observed_effects")}
             messages[-1]["content"] = ("Continue this previous Explorer's policy review. Focus on the measured unmapped "
                 "paragraphs, construct your own positive/negative cases for missing actionable conditions, then call "
                 "complete_policy_review. Informational headings can remain uncovered with a reason. "
-                "Use available query_data and source tools. Prefer batched paired probes and finish this review within 12 turns. "
-                "Do not repeat prior observations or submit all existing action descriptions. Coverage before review: " + json.dumps(self.coverage_before))
+                "A paragraph that is already mapped can still contain conditions that no rule checks: for every write "
+                "tool, compare each condition that its policy sentences and its source code state with the conditions "
+                "the accepted rules already check (listed below), and probe each condition that has no rule of its own. "
+                "The rules listed under 'rewrite' were discarded because their checks hard-coded one entity's "
+                "identifiers; probe the same conditions again with refs so that they hold for every entity. "
+                "Where an observed effect may depend on the state of an entity involved, observe the other states too. "
+                "Use available query_data and source tools. Prefer batched paired probes and finish this review within 25 turns. "
+                "Do not repeat prior observations or submit all existing action descriptions. "
+                + json.dumps(dict(coverage_before=self.coverage_before, accepted_rule_checks=checked, rewrite=redo,
+                                  observed_effects=effects), ensure_ascii=False))
         trace = []
         for turn in range(max_turns):
             print(f"Explorer turn {turn + 1}/{max_turns}", flush=True)
@@ -329,6 +346,13 @@ class ExplorerAgent:
                     llm_usage=dict(self.llm.usage), llm_requests=getattr(self.llm, "records", []),
                     llm_config=dict(getattr(self.llm, "params", {"model": "MockLLM"})), holdout_users=len(self.holdout))
                 result["llm_config"]["api_base"] = "<env:LITELLM_API_BASE>"
+                # [BLOG] "what it changes", derived by replaying the evidence (explorer/effects.py)
+                found, result["effects_report"] = observed_effects(
+                    result, self.case, self.identifiers, schema_enums(self.metadata["db_schema"]))
+                for tool, summary in result["actions"].items():
+                    summary["observed_effects"] = found.get(tool, [])
+                if self.seed and self.seed.get("audit"):
+                    result["audit"] = self.seed["audit"]
                 result["policy_coverage"] = policy_coverage(self.metadata["policy"], accepted,
                     result["conversation_rules"], result.get("paragraph_explanations"))
                 if self.seed:

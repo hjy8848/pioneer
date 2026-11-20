@@ -16,7 +16,8 @@
         }
       ],
       "failure_modes": [],
-      "requires": []
+      "requires": [],
+      "observed_effects": []
     },
     "cancel_pending_order": {
       "changes": [
@@ -190,6 +191,37 @@
             "confirmed_by_tool"
           ]
         }
+      ],
+      "observed_effects": [
+        {
+          "effect": "orders.<id>.cancel_reason: set to 'no longer needed'",
+          "evidence": [
+            "cancel_after_modify_items_fails",
+            "cancel_pending_order_requires_pending"
+          ]
+        },
+        {
+          "effect": "orders.<id>.cancel_reason: set to 'ordered by mistake'",
+          "evidence": [
+            "cancel_pending_order_requires_valid_reason"
+          ]
+        },
+        {
+          "effect": "orders.<id>.payment_history: 1 entry appended (payment_method_id=<id>, transaction_type='refund')",
+          "evidence": [
+            "cancel_after_modify_items_fails",
+            "cancel_pending_order_requires_pending",
+            "cancel_pending_order_requires_valid_reason"
+          ]
+        },
+        {
+          "effect": "orders.<id>.status: 'pending' -> 'cancelled'",
+          "evidence": [
+            "cancel_after_modify_items_fails",
+            "cancel_pending_order_requires_pending",
+            "cancel_pending_order_requires_valid_reason"
+          ]
+        }
       ]
     },
     "exchange_delivered_order_items": {
@@ -344,6 +376,58 @@
             "policy_only"
           ]
         }
+      ],
+      "observed_effects": [
+        {
+          "effect": "orders.<id>.exchange_items: set to <value>",
+          "evidence": [
+            "exchange_allows_identical_item",
+            "exchange_requires_delivered",
+            "observation_26",
+            "observation_30",
+            "observation_37"
+          ]
+        },
+        {
+          "effect": "orders.<id>.exchange_new_items: set to <value>",
+          "evidence": [
+            "exchange_allows_identical_item",
+            "exchange_requires_delivered",
+            "observation_26",
+            "observation_30",
+            "observation_37"
+          ]
+        },
+        {
+          "effect": "orders.<id>.exchange_payment_method_id: set to <id>",
+          "evidence": [
+            "exchange_allows_identical_item",
+            "exchange_requires_delivered",
+            "observation_26",
+            "observation_30",
+            "observation_37"
+          ]
+        },
+        {
+          "effect": "orders.<id>.exchange_price_difference: set to <number>",
+          "evidence": [
+            "exchange_allows_identical_item",
+            "exchange_requires_delivered",
+            "observation_26",
+            "observation_30",
+            "observation_37"
+          ]
+        },
+        {
+          "effect": "orders.<id>.status: 'delivered' -> 'exchange requested'",
+          "evidence": [
+            "exchange_allows_identical_item",
+            "exchange_requires_delivered",
+            "observation_26",
+            "observation_30",
+            "observation_37"
+          ]
+        }
       ]
     },
     "find_user_id_by_email": {
@@ -362,7 +446,8 @@
         }
       ],
       "failure_modes": [],
-      "requires": []
+      "requires": [],
+      "observed_effects": []
     },
     "find_user_id_by_name_zip": {
       "changes": [
@@ -380,7 +465,8 @@
         }
       ],
       "failure_modes": [],
-      "requires": []
+      "requires": [],
+      "observed_effects": []
     },
     "get_item_details": {
       "changes": [
@@ -398,7 +484,8 @@
         }
       ],
       "failure_modes": [],
-      "requires": []
+      "requires": [],
+      "observed_effects": []
     },
     "get_order_details": {
       "changes": [
@@ -416,7 +503,8 @@
         }
       ],
       "failure_modes": [],
-      "requires": []
+      "requires": [],
+      "observed_effects": []
     },
     "get_product_details": {
       "changes": [
@@ -434,7 +522,8 @@
         }
       ],
       "failure_modes": [],
-      "requires": []
+      "requires": [],
+      "observed_effects": []
     },
     "get_user_details": {
       "changes": [
@@ -452,7 +541,8 @@
         }
       ],
       "failure_modes": [],
-      "requires": []
+      "requires": [],
+      "observed_effects": []
     },
     "list_all_product_types": {
       "changes": [
@@ -470,7 +560,8 @@
         }
       ],
       "failure_modes": [],
-      "requires": []
+      "requires": [],
+      "observed_effects": []
     },
     "modify_pending_order_address": {
       "changes": [
@@ -572,6 +663,36 @@
           ],
           "classifications": [
             "confirmed_by_tool"
+          ]
+        }
+      ],
+      "observed_effects": [
+        {
+          "effect": "orders.<id>.address.address1: <text> -> <text>",
+          "evidence": [
+            "address_modification_after_item_modification_gap",
+            "modify_address_requires_pending"
+          ]
+        },
+        {
+          "effect": "orders.<id>.address.address2: <text> -> <text>",
+          "evidence": [
+            "address_modification_after_item_modification_gap",
+            "modify_address_requires_pending"
+          ]
+        },
+        {
+          "effect": "orders.<id>.address.city: <text> -> <text>",
+          "evidence": [
+            "address_modification_after_item_modification_gap",
+            "modify_address_requires_pending"
+          ]
+        },
+        {
+          "effect": "orders.<id>.address.zip: <text> -> <text>",
+          "evidence": [
+            "address_modification_after_item_modification_gap",
+            "modify_address_requires_pending"
           ]
         }
       ]
@@ -746,6 +867,56 @@
             "confirmed_by_tool"
           ]
         }
+      ],
+      "observed_effects": [
+        {
+          "effect": "orders.<id>.items.*.item_id: <id> -> <id>",
+          "evidence": [
+            "modify_items_requires_different_item",
+            "modify_items_requires_pending",
+            "observation_19"
+          ]
+        },
+        {
+          "effect": "orders.<id>.items.*.options.capacity: <text> -> <text>",
+          "evidence": [
+            "modify_items_requires_different_item",
+            "modify_items_requires_pending",
+            "observation_19"
+          ]
+        },
+        {
+          "effect": "orders.<id>.items.*.options.material: <text> -> <text>",
+          "evidence": [
+            "modify_items_requires_different_item",
+            "modify_items_requires_pending",
+            "observation_19"
+          ]
+        },
+        {
+          "effect": "orders.<id>.items.*.price: decreased",
+          "evidence": [
+            "modify_items_requires_different_item",
+            "modify_items_requires_pending",
+            "observation_19"
+          ]
+        },
+        {
+          "effect": "orders.<id>.payment_history: 1 entry appended (payment_method_id=<id>, transaction_type='refund')",
+          "evidence": [
+            "modify_items_requires_different_item",
+            "modify_items_requires_pending",
+            "observation_19"
+          ]
+        },
+        {
+          "effect": "orders.<id>.status: 'pending' -> 'pending (item modified)'",
+          "evidence": [
+            "modify_items_requires_different_item",
+            "modify_items_requires_pending",
+            "observation_19"
+          ]
+        }
       ]
     },
     "modify_pending_order_payment": {
@@ -890,6 +1061,20 @@
             "confirmed_by_tool"
           ]
         }
+      ],
+      "observed_effects": [
+        {
+          "effect": "orders.<id>.payment_history: 2 entries appended (payment_method_id=<id>, transaction_type='payment', transaction_type='refund')",
+          "evidence": [
+            "modify_payment_requires_pending"
+          ]
+        },
+        {
+          "effect": "users.<id>.payment_methods.<id>.balance: increased",
+          "evidence": [
+            "modify_payment_requires_pending"
+          ]
+        }
       ]
     },
     "modify_user_address": {
@@ -954,6 +1139,43 @@
           ],
           "classifications": [
             "confirmed_by_tool"
+          ]
+        }
+      ],
+      "observed_effects": [
+        {
+          "effect": "users.<id>.address.address1: <text> -> <text>",
+          "evidence": [
+            "modify_user_address_requires_valid_user",
+            "observation_27"
+          ]
+        },
+        {
+          "effect": "users.<id>.address.address2: <text> -> <text>",
+          "evidence": [
+            "modify_user_address_requires_valid_user",
+            "observation_27"
+          ]
+        },
+        {
+          "effect": "users.<id>.address.city: <text> -> <text>",
+          "evidence": [
+            "modify_user_address_requires_valid_user",
+            "observation_27"
+          ]
+        },
+        {
+          "effect": "users.<id>.address.state: <text> -> <text>",
+          "evidence": [
+            "modify_user_address_requires_valid_user",
+            "observation_27"
+          ]
+        },
+        {
+          "effect": "users.<id>.address.zip: <text> -> <text>",
+          "evidence": [
+            "modify_user_address_requires_valid_user",
+            "observation_27"
           ]
         }
       ]
@@ -1100,6 +1322,32 @@
             "confirmed_by_tool"
           ]
         }
+      ],
+      "observed_effects": [
+        {
+          "effect": "orders.<id>.return_items: set to <value>",
+          "evidence": [
+            "observation_34",
+            "observation_35",
+            "return_requires_delivered"
+          ]
+        },
+        {
+          "effect": "orders.<id>.return_payment_method_id: set to <id>",
+          "evidence": [
+            "observation_34",
+            "observation_35",
+            "return_requires_delivered"
+          ]
+        },
+        {
+          "effect": "orders.<id>.status: 'delivered' -> 'return requested'",
+          "evidence": [
+            "observation_34",
+            "observation_35",
+            "return_requires_delivered"
+          ]
+        }
       ]
     },
     "transfer_to_human_agents": {
@@ -1118,7 +1366,8 @@
         }
       ],
       "failure_modes": [],
-      "requires": []
+      "requires": [],
+      "observed_effects": []
     }
   },
   "atomic_actions": [

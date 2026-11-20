@@ -375,6 +375,41 @@
           "classifications": [
             "policy_only"
           ]
+        },
+        {
+          "evidence": [
+            "exchange_gift_card_balance_v2"
+          ],
+          "text": "exchange_delivered_order_items requires the payment method gift card to have sufficient balance for the price difference",
+          "verified_checks": [
+            {
+              "any": [
+                {
+                  "compare": [
+                    {
+                      "ref": "payment.source"
+                    },
+                    "ne",
+                    "gift_card"
+                  ]
+                },
+                {
+                  "compare": [
+                    {
+                      "ref": "payment.balance"
+                    },
+                    "ge",
+                    {
+                      "ref": "required_amount"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "classifications": [
+            "confirmed_by_tool"
+          ]
         }
       ],
       "observed_effects": [
@@ -382,6 +417,7 @@
           "effect": "orders.<id>.exchange_items: set to <value>",
           "evidence": [
             "exchange_allows_identical_item",
+            "exchange_gift_card_balance_v2",
             "exchange_requires_delivered",
             "observation_26",
             "observation_30",
@@ -392,6 +428,7 @@
           "effect": "orders.<id>.exchange_new_items: set to <value>",
           "evidence": [
             "exchange_allows_identical_item",
+            "exchange_gift_card_balance_v2",
             "exchange_requires_delivered",
             "observation_26",
             "observation_30",
@@ -402,6 +439,7 @@
           "effect": "orders.<id>.exchange_payment_method_id: set to <id>",
           "evidence": [
             "exchange_allows_identical_item",
+            "exchange_gift_card_balance_v2",
             "exchange_requires_delivered",
             "observation_26",
             "observation_30",
@@ -412,6 +450,7 @@
           "effect": "orders.<id>.exchange_price_difference: set to <number>",
           "evidence": [
             "exchange_allows_identical_item",
+            "exchange_gift_card_balance_v2",
             "exchange_requires_delivered",
             "observation_26",
             "observation_30",
@@ -422,6 +461,7 @@
           "effect": "orders.<id>.status: 'delivered' -> 'exchange requested'",
           "evidence": [
             "exchange_allows_identical_item",
+            "exchange_gift_card_balance_v2",
             "exchange_requires_delivered",
             "observation_26",
             "observation_30",
@@ -1060,19 +1100,83 @@
           "classifications": [
             "confirmed_by_tool"
           ]
+        },
+        {
+          "evidence": [
+            "modify_payment_different_v3"
+          ],
+          "text": "modify_pending_order_payment requires the new payment method to be different from the original payment method",
+          "verified_checks": [
+            {
+              "collection": "orders",
+              "where": [
+                [
+                  "order_id",
+                  "eq",
+                  {
+                    "ref": "args.order_id"
+                  }
+                ],
+                [
+                  "payment_history.0.payment_method_id",
+                  "ne",
+                  {
+                    "ref": "args.payment_method_id"
+                  }
+                ]
+              ]
+            }
+          ],
+          "classifications": [
+            "confirmed_by_tool"
+          ]
+        },
+        {
+          "evidence": [
+            "modify_payment_only_once"
+          ],
+          "text": "modify_pending_order_payment can only be called once per order (payment history must have exactly one payment entry)",
+          "verified_checks": [
+            {
+              "collection": "orders",
+              "where": [
+                [
+                  "order_id",
+                  "eq",
+                  {
+                    "ref": "args.order_id"
+                  }
+                ],
+                [
+                  "payment_history",
+                  "len_eq",
+                  1
+                ]
+              ]
+            }
+          ],
+          "classifications": [
+            "confirmed_by_tool"
+          ]
         }
       ],
       "observed_effects": [
         {
           "effect": "orders.<id>.payment_history: 2 entries appended (payment_method_id=<id>, transaction_type='payment', transaction_type='refund')",
           "evidence": [
-            "modify_payment_requires_pending"
+            "modify_payment_different_v3",
+            "modify_payment_only_once",
+            "modify_payment_requires_pending",
+            "observation_42"
           ]
         },
         {
           "effect": "users.<id>.payment_methods.<id>.balance: increased",
           "evidence": [
-            "modify_payment_requires_pending"
+            "modify_payment_different_v3",
+            "modify_payment_only_once",
+            "modify_payment_requires_pending",
+            "observation_42"
           ]
         }
       ]
@@ -1321,6 +1425,57 @@
           "classifications": [
             "confirmed_by_tool"
           ]
+        },
+        {
+          "evidence": [
+            "return_original_or_giftcard_v3"
+          ],
+          "text": "return_delivered_order_items requires the refund payment method to be either the original payment method or a gift card",
+          "verified_checks": [
+            {
+              "any": [
+                {
+                  "collection": "orders",
+                  "where": [
+                    [
+                      "order_id",
+                      "eq",
+                      {
+                        "ref": "args.order_id"
+                      }
+                    ],
+                    [
+                      "payment_history.0.payment_method_id",
+                      "eq",
+                      {
+                        "ref": "args.payment_method_id"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "collection": "users",
+                  "where": [
+                    [
+                      "user_id",
+                      "eq",
+                      {
+                        "ref": "order.user_id"
+                      }
+                    ],
+                    [
+                      "payment_methods.args.payment_method_id.source",
+                      "eq",
+                      "gift_card"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "classifications": [
+            "confirmed_by_tool"
+          ]
         }
       ],
       "observed_effects": [
@@ -1329,6 +1484,8 @@
           "evidence": [
             "observation_34",
             "observation_35",
+            "observation_44",
+            "return_original_or_giftcard_v3",
             "return_requires_delivered"
           ]
         },
@@ -1337,6 +1494,8 @@
           "evidence": [
             "observation_34",
             "observation_35",
+            "observation_44",
+            "return_original_or_giftcard_v3",
             "return_requires_delivered"
           ]
         },
@@ -1345,6 +1504,8 @@
           "evidence": [
             "observation_34",
             "observation_35",
+            "observation_44",
+            "return_original_or_giftcard_v3",
             "return_requires_delivered"
           ]
         }
@@ -1453,46 +1614,48 @@
     }
   ],
   "paragraph_explanations": {
-    "P0": "Informational title heading with no actionable conditions",
-    "P1": "Informational introduction with no actionable conditions",
-    "P2": "Informational capability list with no actionable conditions",
-    "P4": "Informational description of post-authentication capabilities with no actionable conditions",
-    "P9": "General policy statement about denying invalid requests, covered by individual tool preconditions",
-    "P11": "Informational section heading with no actionable conditions",
-    "P12": "Informational note about time format with no actionable conditions",
-    "P13": "Informational section heading with no actionable conditions",
-    "P14": "Informational description of user profile structure with no actionable conditions",
-    "P15": "Informational list of user profile fields with no actionable conditions",
-    "P16": "Informational description of payment method types with no actionable conditions",
-    "P17": "Informational section heading with no actionable conditions",
-    "P18": "Informational statement about product count with no actionable conditions",
-    "P19": "Informational description of product variants with no actionable conditions",
-    "P20": "Informational example of product variants with no actionable conditions",
-    "P21": "Informational introduction to product attributes with no actionable conditions",
-    "P22": "Informational list of product attributes with no actionable conditions",
-    "P23": "Informational introduction to variant attributes with no actionable conditions",
-    "P24": "Informational list of variant attributes with no actionable conditions",
-    "P25": "Informational note about ID distinction with no actionable conditions",
-    "P26": "Informational section heading with no actionable conditions",
-    "P27": "Informational introduction to order attributes with no actionable conditions",
-    "P28": "Informational list of order attributes with no actionable conditions",
-    "P29": "Informational description of order status values with no actionable conditions",
-    "P30": "Informational description of optional order attributes with no actionable conditions",
-    "P31": "Informational section heading with no actionable conditions",
-    "P32": "General statement about action scope, covered by individual tool preconditions for pending/delivered status",
-    "P34": "Informational section heading with no actionable conditions",
-    "P37": "Informational description of cancellation side effects with no actionable conditions",
-    "P38": "Informational section heading with no actionable conditions",
-    "P40": "Informational description of modification scope with no actionable conditions",
-    "P41": "Informational section heading with no actionable conditions",
-    "P44": "Informational description of payment modification side effects with no actionable conditions",
-    "P45": "Informational section heading with no actionable conditions",
-    "P49": "Informational section heading with no actionable conditions",
-    "P51": "Informational description of return confirmation requirements with no actionable conditions",
-    "P52": "Informational description of return payment method requirement, covered by return_requires_original_or_giftcard",
-    "P54": "Informational description of return side effects with no actionable conditions",
-    "P55": "Informational section heading with no actionable conditions",
-    "P59": "Informational description of exchange side effects with no actionable conditions"
+    "P0": "Title heading - no actionable rule",
+    "P1": "Introduction heading - no actionable rule",
+    "P2": "Summary of capabilities - no actionable rule",
+    "P4": "Informational - describes what can be done after authentication, no enforcement",
+    "P9": "General instruction to deny policy violations - no specific tool enforcement",
+    "P11": "Section heading - no actionable rule",
+    "P12": "Domain fact about time format - no tool enforcement",
+    "P13": "Section heading - no actionable rule",
+    "P14": "Descriptive text about user profile - no actionable rule",
+    "P15": "List of user attributes - informational",
+    "P16": "Describes payment method types - informational",
+    "P17": "Section heading - no actionable rule",
+    "P18": "Domain fact about product count - informational",
+    "P19": "Describes product variants - informational",
+    "P20": "Example of variants - informational",
+    "P21": "Descriptive text - informational",
+    "P22": "List of product attributes - informational",
+    "P23": "Descriptive text - informational",
+    "P24": "List of variant attributes - informational",
+    "P25": "Note about ID distinction - informational",
+    "P26": "Section heading - no actionable rule",
+    "P27": "Descriptive text - informational",
+    "P28": "List of order attributes - informational",
+    "P29": "Describes order statuses - informational",
+    "P30": "Describes optional order attributes - informational",
+    "P31": "Section heading - no actionable rule",
+    "P32": "General rule about order statuses - covered by specific status checks",
+    "P34": "Section heading - no actionable rule",
+    "P37": "Describes refund timing after cancellation - informational effect description",
+    "P38": "Section heading - no actionable rule",
+    "P40": "Describes what can be modified - covered by specific modify tools",
+    "P41": "Section heading - no actionable rule",
+    "P43": "Gift card balance requirement for modify payment - tool enforces but probe construction failed due to ref resolution issues",
+    "P44": "Describes refund timing after payment modification - informational effect description",
+    "P45": "Section heading - no actionable rule",
+    "P48": "Gift card balance requirement for modify items - tool enforces but probe construction failed due to ref resolution issues",
+    "P49": "Section heading - no actionable rule",
+    "P51": "Describes confirmation requirement - covered by confirm_before_write conversation rule",
+    "P52": "Describes payment method requirement - covered by return_original_or_giftcard_v3",
+    "P54": "Describes status change after return - informational effect description",
+    "P55": "Section heading - no actionable rule",
+    "P59": "Describes status change after exchange - informational effect description"
   },
   "rules": [
     {
@@ -2543,6 +2706,409 @@
             "error": "ValueError: User not found",
             "hash_before": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
             "hash_after": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c"
+          }
+        }
+      ]
+    },
+    {
+      "rule_id": "exchange_gift_card_balance_v2",
+      "tools": [
+        "exchange_delivered_order_items"
+      ],
+      "text": "exchange_delivered_order_items requires the payment method gift card to have sufficient balance for the price difference",
+      "check": {
+        "any": [
+          {
+            "compare": [
+              {
+                "ref": "payment.source"
+              },
+              "ne",
+              "gift_card"
+            ]
+          },
+          {
+            "compare": [
+              {
+                "ref": "payment.balance"
+              },
+              "ge",
+              {
+                "ref": "required_amount"
+              }
+            ]
+          }
+        ]
+      },
+      "per_item": false,
+      "level": "state",
+      "policy_quote": "The user must provide a payment method to pay or receive refund of the price difference. If the user provides a gift card, it must have enough balance to cover the price difference.",
+      "classification": "confirmed_by_tool",
+      "cases": [
+        {
+          "compliant": true,
+          "case": {
+            "arguments": {
+              "order_id": "#W4817420",
+              "item_ids": [
+                "6777246137"
+              ],
+              "new_item_ids": [
+                "4579334072"
+              ],
+              "payment_method_id": "gift_card_8168843"
+            },
+            "patches": [
+              {
+                "collection": "users",
+                "id": "ava_moore_2033",
+                "changes": {
+                  "payment_methods": {
+                    "gift_card_8168843": {
+                      "source": "gift_card",
+                      "id": "gift_card_8168843",
+                      "balance": 500.0
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "execution": {
+            "tool_name": "exchange_delivered_order_items",
+            "arguments": {
+              "order_id": "#W4817420",
+              "item_ids": [
+                "6777246137"
+              ],
+              "new_item_ids": [
+                "4579334072"
+              ],
+              "payment_method_id": "gift_card_8168843"
+            },
+            "requestor": "assistant",
+            "ok": true,
+            "result": "{\"order_id\": \"#W4817420\", \"user_id\": \"ava_moore_2033\", \"address\": {\"address1\": \"996 Cedar Street\", \"address2\": \"Suite 656\", \"city\": \"San Antonio\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"78234\"}, \"items\": [{\"name\": \"Water Bottle\", \"product_id\": \"8310926033\", \"item_id\": \"6777246137\", \"price\": 47.76, \"options\": {\"capacity\": \"750ml\", \"material\": \"stainless steel\", \"color\": \"red\"}}, {\"name\": \"Bookshelf\", \"product_id\": \"8600330539\", \"item_id\": \"4900661478\", \"price\": 463.04, \"options\": {\"material\": \"glass\", \"color\": \"black\", \"height\": \"5 ft\"}}, {\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"6700049080\", \"price\": 466.75, \"options\": {\"resolution\": \"4K\", \"waterproof\": \"yes\", \"color\": \"black\"}}, {\"name\": \"Electric Kettle\", \"product_id\": \"1075968781\", \"item_id\": \"9624127908\", \"price\": 158.9, \"options\": {\"capacity\": \"1.5L\", \"material\": \"plastic\", \"color\": \"silver\"}}, {\"name\": \"Hiking Boots\", \"product_id\": \"7363354090\", \"item_id\": \"3812493782\", \"price\": 244.34, \"options\": {\"size\": \"7\", \"material\": \"leather\", \"waterproof\": \"yes\"}}], \"status\": \"exchange requested\", \"fulfillments\": [{\"tracking_id\": [\"490313116609\"], \"item_ids\": [\"6777246137\", \"4900661478\", \"6700049080\", \"9624127908\", \"3812493782\"]}], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 1380.79, \"payment_method_id\": \"gift_card_8168843\"}], \"cancel_reason\": null, \"exchange_items\": [\"6777246137\"], \"exchange_new_items\": [\"4579334072\"], \"exchange_payment_method_id\": \"gift_card_8168843\", \"exchange_price_difference\": 7.09, \"return_items\": null, \"return_payment_method_id\": null}",
+            "error": null,
+            "hash_before": "09032d547a2e08ec3c35537058fa02324cbaaa5a229028af7c9a8a4356096d17",
+            "hash_after": "5cb6e23b6f63c462fb46227dfee83ede4a49ecc602388c84efc296f809216a5d"
+          }
+        },
+        {
+          "compliant": false,
+          "case": {
+            "arguments": {
+              "order_id": "#W4817420",
+              "item_ids": [
+                "6777246137"
+              ],
+              "new_item_ids": [
+                "4579334072"
+              ],
+              "payment_method_id": "gift_card_8168843"
+            },
+            "patches": [
+              {
+                "collection": "users",
+                "id": "ava_moore_2033",
+                "changes": {
+                  "payment_methods": {
+                    "gift_card_8168843": {
+                      "source": "gift_card",
+                      "id": "gift_card_8168843",
+                      "balance": 0.0
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "execution": {
+            "tool_name": "exchange_delivered_order_items",
+            "arguments": {
+              "order_id": "#W4817420",
+              "item_ids": [
+                "6777246137"
+              ],
+              "new_item_ids": [
+                "4579334072"
+              ],
+              "payment_method_id": "gift_card_8168843"
+            },
+            "requestor": "assistant",
+            "ok": false,
+            "result": null,
+            "error": "ValueError: Insufficient gift card balance to pay for the price difference",
+            "hash_before": "427965809d6d3c45f9dbaf627f644ad9c157a1599d53d8cc15ef6ae11f7f82de",
+            "hash_after": "427965809d6d3c45f9dbaf627f644ad9c157a1599d53d8cc15ef6ae11f7f82de"
+          }
+        }
+      ]
+    },
+    {
+      "rule_id": "modify_payment_different_v3",
+      "tools": [
+        "modify_pending_order_payment"
+      ],
+      "text": "modify_pending_order_payment requires the new payment method to be different from the original payment method",
+      "check": {
+        "collection": "orders",
+        "where": [
+          [
+            "order_id",
+            "eq",
+            {
+              "ref": "args.order_id"
+            }
+          ],
+          [
+            "payment_history.0.payment_method_id",
+            "ne",
+            {
+              "ref": "args.payment_method_id"
+            }
+          ]
+        ]
+      },
+      "per_item": false,
+      "level": "state",
+      "policy_quote": "The user can only choose a single payment method different from the original payment method.",
+      "classification": "confirmed_by_tool",
+      "cases": [
+        {
+          "compliant": true,
+          "case": {
+            "arguments": {
+              "order_id": "#W6779827",
+              "payment_method_id": "credit_card_9789590"
+            }
+          },
+          "execution": {
+            "tool_name": "modify_pending_order_payment",
+            "arguments": {
+              "order_id": "#W6779827",
+              "payment_method_id": "credit_card_9789590"
+            },
+            "requestor": "assistant",
+            "ok": true,
+            "result": "{\"order_id\": \"#W6779827\", \"user_id\": \"ethan_lopez_6291\", \"address\": {\"address1\": \"103 Hillcrest Drive\", \"address2\": \"Suite 162\", \"city\": \"Columbus\", \"country\": \"USA\", \"state\": \"OH\", \"zip\": \"43275\"}, \"items\": [{\"name\": \"Dumbbell Set\", \"product_id\": \"7233192239\", \"item_id\": \"7896397433\", \"price\": 457.81, \"options\": {\"weight range\": \"5-25 lbs\", \"material\": \"rubber\", \"set type\": \"adjustable\"}}, {\"name\": \"Espresso Machine\", \"product_id\": \"4354588079\", \"item_id\": \"3379843752\", \"price\": 3203.76, \"options\": {\"pressure\": \"19 bar\", \"capacity\": \"2L\", \"type\": \"manual\"}}, {\"name\": \"Coffee Maker\", \"product_id\": \"7996920482\", \"item_id\": \"1323134954\", \"price\": 236.95, \"options\": {\"color\": \"stainless steel\", \"capacity\": \"4 cups\", \"type\": \"drip\", \"features\": \"built-in grinder\"}}, {\"name\": \"Pet Bed\", \"product_id\": \"2747247837\", \"item_id\": \"6942241102\", \"price\": 180.93, \"options\": {\"size\": \"large\", \"material\": \"memory foam\", \"color\": \"beige\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 4079.45, \"payment_method_id\": \"gift_card_7219486\"}, {\"transaction_type\": \"payment\", \"amount\": 4079.45, \"payment_method_id\": \"credit_card_9789590\"}, {\"transaction_type\": \"refund\", \"amount\": 4079.45, \"payment_method_id\": \"gift_card_7219486\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}",
+            "error": null,
+            "hash_before": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+            "hash_after": "15a38d4dfc0b97ad9576a563fe3c4030d8131e26bfb000d6fdb794de0eafca67"
+          }
+        },
+        {
+          "compliant": false,
+          "case": {
+            "arguments": {
+              "order_id": "#W6779827",
+              "payment_method_id": "gift_card_7219486"
+            }
+          },
+          "execution": {
+            "tool_name": "modify_pending_order_payment",
+            "arguments": {
+              "order_id": "#W6779827",
+              "payment_method_id": "gift_card_7219486"
+            },
+            "requestor": "assistant",
+            "ok": false,
+            "result": null,
+            "error": "ValueError: The new payment method should be different from the current one",
+            "hash_before": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+            "hash_after": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c"
+          }
+        }
+      ]
+    },
+    {
+      "rule_id": "return_original_or_giftcard_v3",
+      "tools": [
+        "return_delivered_order_items"
+      ],
+      "text": "return_delivered_order_items requires the refund payment method to be either the original payment method or a gift card",
+      "check": {
+        "any": [
+          {
+            "collection": "orders",
+            "where": [
+              [
+                "order_id",
+                "eq",
+                {
+                  "ref": "args.order_id"
+                }
+              ],
+              [
+                "payment_history.0.payment_method_id",
+                "eq",
+                {
+                  "ref": "args.payment_method_id"
+                }
+              ]
+            ]
+          },
+          {
+            "collection": "users",
+            "where": [
+              [
+                "user_id",
+                "eq",
+                {
+                  "ref": "order.user_id"
+                }
+              ],
+              [
+                "payment_methods.args.payment_method_id.source",
+                "eq",
+                "gift_card"
+              ]
+            ]
+          }
+        ]
+      },
+      "per_item": false,
+      "level": "state",
+      "policy_quote": "The refund must either go to the original payment method, or an existing gift card.",
+      "classification": "confirmed_by_tool",
+      "cases": [
+        {
+          "compliant": true,
+          "case": {
+            "arguments": {
+              "order_id": "#W7303089",
+              "item_ids": [
+                "2492465580"
+              ],
+              "payment_method_id": "credit_card_4387170"
+            }
+          },
+          "execution": {
+            "tool_name": "return_delivered_order_items",
+            "arguments": {
+              "order_id": "#W7303089",
+              "item_ids": [
+                "2492465580"
+              ],
+              "payment_method_id": "credit_card_4387170"
+            },
+            "requestor": "assistant",
+            "ok": true,
+            "result": "{\"order_id\": \"#W7303089\", \"user_id\": \"mei_gonzalez_4785\", \"address\": {\"address1\": \"858 Elm Street\", \"address2\": \"Suite 912\", \"city\": \"San Jose\", \"country\": \"USA\", \"state\": \"CA\", \"zip\": \"95170\"}, \"items\": [{\"name\": \"Backpack\", \"product_id\": \"2524789262\", \"item_id\": \"2492465580\", \"price\": 201.95, \"options\": {\"color\": \"navy\", \"size\": \"small\", \"material\": \"nylon\", \"compartment\": \"laptop\"}}, {\"name\": \"Pet Bed\", \"product_id\": \"2747247837\", \"item_id\": \"7381052709\", \"price\": 193.22, \"options\": {\"size\": \"large\", \"material\": \"memory foam\", \"color\": \"brown\"}}], \"status\": \"return requested\", \"fulfillments\": [{\"tracking_id\": [\"889070895653\"], \"item_ids\": [\"2492465580\", \"7381052709\"]}], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 395.17, \"payment_method_id\": \"credit_card_4387170\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": [\"2492465580\"], \"return_payment_method_id\": \"credit_card_4387170\"}",
+            "error": null,
+            "hash_before": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+            "hash_after": "1cc841999c6cbfd457fb3da6ffb58cca3baeed0ae3cd0e0743e4c133c9e101d7"
+          }
+        },
+        {
+          "compliant": false,
+          "case": {
+            "arguments": {
+              "order_id": "#W7303089",
+              "item_ids": [
+                "2492465580"
+              ],
+              "payment_method_id": "paypal_2568958"
+            }
+          },
+          "execution": {
+            "tool_name": "return_delivered_order_items",
+            "arguments": {
+              "order_id": "#W7303089",
+              "item_ids": [
+                "2492465580"
+              ],
+              "payment_method_id": "paypal_2568958"
+            },
+            "requestor": "assistant",
+            "ok": false,
+            "result": null,
+            "error": "ValueError: Payment method should be the original payment method",
+            "hash_before": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+            "hash_after": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c"
+          }
+        }
+      ]
+    },
+    {
+      "rule_id": "modify_payment_only_once",
+      "tools": [
+        "modify_pending_order_payment"
+      ],
+      "text": "modify_pending_order_payment can only be called once per order (payment history must have exactly one payment entry)",
+      "check": {
+        "collection": "orders",
+        "where": [
+          [
+            "order_id",
+            "eq",
+            {
+              "ref": "args.order_id"
+            }
+          ],
+          [
+            "payment_history",
+            "len_eq",
+            1
+          ]
+        ]
+      },
+      "per_item": false,
+      "level": "state",
+      "policy_quote": "Exchange or modify order tools can only be called once per order.",
+      "classification": "confirmed_by_tool",
+      "cases": [
+        {
+          "compliant": true,
+          "case": {
+            "arguments": {
+              "order_id": "#W6779827",
+              "payment_method_id": "credit_card_9789590"
+            }
+          },
+          "execution": {
+            "tool_name": "modify_pending_order_payment",
+            "arguments": {
+              "order_id": "#W6779827",
+              "payment_method_id": "credit_card_9789590"
+            },
+            "requestor": "assistant",
+            "ok": true,
+            "result": "{\"order_id\": \"#W6779827\", \"user_id\": \"ethan_lopez_6291\", \"address\": {\"address1\": \"103 Hillcrest Drive\", \"address2\": \"Suite 162\", \"city\": \"Columbus\", \"country\": \"USA\", \"state\": \"OH\", \"zip\": \"43275\"}, \"items\": [{\"name\": \"Dumbbell Set\", \"product_id\": \"7233192239\", \"item_id\": \"7896397433\", \"price\": 457.81, \"options\": {\"weight range\": \"5-25 lbs\", \"material\": \"rubber\", \"set type\": \"adjustable\"}}, {\"name\": \"Espresso Machine\", \"product_id\": \"4354588079\", \"item_id\": \"3379843752\", \"price\": 3203.76, \"options\": {\"pressure\": \"19 bar\", \"capacity\": \"2L\", \"type\": \"manual\"}}, {\"name\": \"Coffee Maker\", \"product_id\": \"7996920482\", \"item_id\": \"1323134954\", \"price\": 236.95, \"options\": {\"color\": \"stainless steel\", \"capacity\": \"4 cups\", \"type\": \"drip\", \"features\": \"built-in grinder\"}}, {\"name\": \"Pet Bed\", \"product_id\": \"2747247837\", \"item_id\": \"6942241102\", \"price\": 180.93, \"options\": {\"size\": \"large\", \"material\": \"memory foam\", \"color\": \"beige\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 4079.45, \"payment_method_id\": \"gift_card_7219486\"}, {\"transaction_type\": \"payment\", \"amount\": 4079.45, \"payment_method_id\": \"credit_card_9789590\"}, {\"transaction_type\": \"refund\", \"amount\": 4079.45, \"payment_method_id\": \"gift_card_7219486\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}",
+            "error": null,
+            "hash_before": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+            "hash_after": "15a38d4dfc0b97ad9576a563fe3c4030d8131e26bfb000d6fdb794de0eafca67"
+          }
+        },
+        {
+          "compliant": false,
+          "case": {
+            "arguments": {
+              "order_id": "#W6779827",
+              "payment_method_id": "credit_card_9789590"
+            },
+            "setup": [
+              {
+                "tool": "modify_pending_order_payment",
+                "arguments": {
+                  "order_id": "#W6779827",
+                  "payment_method_id": "credit_card_9789590"
+                }
+              }
+            ]
+          },
+          "execution": {
+            "tool_name": "modify_pending_order_payment",
+            "arguments": {
+              "order_id": "#W6779827",
+              "payment_method_id": "credit_card_9789590"
+            },
+            "requestor": "assistant",
+            "ok": false,
+            "result": null,
+            "error": "ValueError: There should be exactly one payment for a pending order",
+            "hash_before": "15a38d4dfc0b97ad9576a563fe3c4030d8131e26bfb000d6fdb794de0eafca67",
+            "hash_after": "15a38d4dfc0b97ad9576a563fe3c4030d8131e26bfb000d6fdb794de0eafca67"
           }
         }
       ]
@@ -4433,10 +4999,114 @@
         "hash_before": "17f4d0214237c35fb90cd0f0f6af1c96edf73505c860a0459e06af31590ac8c9",
         "hash_after": "17f4d0214237c35fb90cd0f0f6af1c96edf73505c860a0459e06af31590ac8c9"
       }
+    },
+    "observation_42": {
+      "tool": "modify_pending_order_payment",
+      "arguments": {
+        "order_id": "#W6779827",
+        "payment_method_id": "credit_card_9789590"
+      },
+      "patches": [],
+      "setup": [],
+      "initial_hash": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+      "execution": {
+        "tool_name": "modify_pending_order_payment",
+        "arguments": {
+          "order_id": "#W6779827",
+          "payment_method_id": "credit_card_9789590"
+        },
+        "requestor": "assistant",
+        "ok": true,
+        "result": "{\"order_id\": \"#W6779827\", \"user_id\": \"ethan_lopez_6291\", \"address\": {\"address1\": \"103 Hillcrest Drive\", \"address2\": \"Suite 162\", \"city\": \"Columbus\", \"country\": \"USA\", \"state\": \"OH\", \"zip\": \"43275\"}, \"items\": [{\"name\": \"Dumbbell Set\", \"product_id\": \"7233192239\", \"item_id\": \"7896397433\", \"price\": 457.81, \"options\": {\"weight range\": \"5-25 lbs\", \"material\": \"rubber\", \"set type\": \"adjustable\"}}, {\"name\": \"Espresso Machine\", \"product_id\": \"4354588079\", \"item_id\": \"3379843752\", \"price\": 3203.76, \"options\": {\"pressure\": \"19 bar\", \"capacity\": \"2L\", \"type\": \"manual\"}}, {\"name\": \"Coffee Maker\", \"product_id\": \"7996920482\", \"item_id\": \"1323134954\", \"price\": 236.95, \"options\": {\"color\": \"stainless steel\", \"capacity\": \"4 cups\", \"type\": \"drip\", \"features\": \"built-in grinder\"}}, {\"name\": \"Pet Bed\", \"product_id\": \"2747247837\", \"item_id\": \"6942241102\", \"price\": 180.93, \"options\": {\"size\": \"large\", \"material\": \"memory foam\", \"color\": \"beige\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 4079.45, \"payment_method_id\": \"gift_card_7219486\"}, {\"transaction_type\": \"payment\", \"amount\": 4079.45, \"payment_method_id\": \"credit_card_9789590\"}, {\"transaction_type\": \"refund\", \"amount\": 4079.45, \"payment_method_id\": \"gift_card_7219486\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}",
+        "error": null,
+        "hash_before": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+        "hash_after": "15a38d4dfc0b97ad9576a563fe3c4030d8131e26bfb000d6fdb794de0eafca67"
+      }
+    },
+    "observation_43": {
+      "tool": "modify_pending_order_payment",
+      "arguments": {
+        "order_id": "#W6779827",
+        "payment_method_id": "gift_card_7219486"
+      },
+      "patches": [],
+      "setup": [],
+      "initial_hash": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+      "execution": {
+        "tool_name": "modify_pending_order_payment",
+        "arguments": {
+          "order_id": "#W6779827",
+          "payment_method_id": "gift_card_7219486"
+        },
+        "requestor": "assistant",
+        "ok": false,
+        "result": null,
+        "error": "ValueError: The new payment method should be different from the current one",
+        "hash_before": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+        "hash_after": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c"
+      }
+    },
+    "observation_44": {
+      "tool": "return_delivered_order_items",
+      "arguments": {
+        "order_id": "#W7303089",
+        "item_ids": [
+          "2492465580"
+        ],
+        "payment_method_id": "credit_card_4387170"
+      },
+      "patches": [],
+      "setup": [],
+      "initial_hash": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+      "execution": {
+        "tool_name": "return_delivered_order_items",
+        "arguments": {
+          "order_id": "#W7303089",
+          "item_ids": [
+            "2492465580"
+          ],
+          "payment_method_id": "credit_card_4387170"
+        },
+        "requestor": "assistant",
+        "ok": true,
+        "result": "{\"order_id\": \"#W7303089\", \"user_id\": \"mei_gonzalez_4785\", \"address\": {\"address1\": \"858 Elm Street\", \"address2\": \"Suite 912\", \"city\": \"San Jose\", \"country\": \"USA\", \"state\": \"CA\", \"zip\": \"95170\"}, \"items\": [{\"name\": \"Backpack\", \"product_id\": \"2524789262\", \"item_id\": \"2492465580\", \"price\": 201.95, \"options\": {\"color\": \"navy\", \"size\": \"small\", \"material\": \"nylon\", \"compartment\": \"laptop\"}}, {\"name\": \"Pet Bed\", \"product_id\": \"2747247837\", \"item_id\": \"7381052709\", \"price\": 193.22, \"options\": {\"size\": \"large\", \"material\": \"memory foam\", \"color\": \"brown\"}}], \"status\": \"return requested\", \"fulfillments\": [{\"tracking_id\": [\"889070895653\"], \"item_ids\": [\"2492465580\", \"7381052709\"]}], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 395.17, \"payment_method_id\": \"credit_card_4387170\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": [\"2492465580\"], \"return_payment_method_id\": \"credit_card_4387170\"}",
+        "error": null,
+        "hash_before": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+        "hash_after": "1cc841999c6cbfd457fb3da6ffb58cca3baeed0ae3cd0e0743e4c133c9e101d7"
+      }
+    },
+    "observation_45": {
+      "tool": "return_delivered_order_items",
+      "arguments": {
+        "order_id": "#W7303089",
+        "item_ids": [
+          "2492465580"
+        ],
+        "payment_method_id": "paypal_2568958"
+      },
+      "patches": [],
+      "setup": [],
+      "initial_hash": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+      "execution": {
+        "tool_name": "return_delivered_order_items",
+        "arguments": {
+          "order_id": "#W7303089",
+          "item_ids": [
+            "2492465580"
+          ],
+          "payment_method_id": "paypal_2568958"
+        },
+        "requestor": "assistant",
+        "ok": false,
+        "result": null,
+        "error": "ValueError: Payment method should be the original payment method",
+        "hash_before": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c",
+        "hash_after": "b25c9cb211f5efcaee5dd646054a73c4a9f43f4f5acc32c10713cd9f9ac20e9c"
+      }
     }
   },
   "rule_counts": {
-    "confirmed_by_tool": 10,
+    "confirmed_by_tool": 14,
     "policy_only": 2,
     "contradicted": 2,
     "instance_specific": 5
@@ -5767,43 +6437,132 @@
   },
   "tau2_commit": "fc0055dc4e0a316c3f83133267fbd6faaa770992",
   "llm_usage": {
-    "calls": 12,
-    "cache_hits": 0,
-    "prompt_tokens": 442236,
-    "completion_tokens": 14937,
-    "cost_usd": 1.1031330000000001,
+    "calls": 1,
+    "cache_hits": 19,
+    "prompt_tokens": 68766,
+    "completion_tokens": 902,
+    "cost_usd": 0.0289496,
     "unknown_cost_calls": 0
   },
   "llm_config": {
-    "model": "openai/qwen3.7-max",
+    "model": "openai/dashscope/qwen3.7-plus",
     "temperature": 0.0,
     "seed": 0,
     "max_tokens": 16000,
     "api_base": "<env:LITELLM_API_BASE>"
   },
   "holdout_users": 53,
+  "effects_report": {
+    "replayed": 25,
+    "skipped_unchanged": 37,
+    "mismatched": []
+  },
+  "audit": [
+    {
+      "kind": "instance_specific_rules",
+      "removed": [
+        "exchange_gift_card_balance",
+        "modify_items_gift_card_balance",
+        "modify_payment_gift_card_balance_v2",
+        "modify_payment_requires_different_method",
+        "return_requires_original_or_giftcard"
+      ],
+      "dropped_claims": [
+        {
+          "tool": "exchange_delivered_order_items",
+          "kind": "requires",
+          "evidence": [
+            "exchange_gift_card_balance"
+          ]
+        },
+        {
+          "tool": "exchange_delivered_order_items",
+          "kind": "failure_modes",
+          "evidence": [
+            "exchange_gift_card_balance"
+          ]
+        },
+        {
+          "tool": "modify_pending_order_items",
+          "kind": "requires",
+          "evidence": [
+            "modify_items_gift_card_balance"
+          ]
+        },
+        {
+          "tool": "modify_pending_order_items",
+          "kind": "failure_modes",
+          "evidence": [
+            "modify_items_gift_card_balance"
+          ]
+        },
+        {
+          "tool": "modify_pending_order_payment",
+          "kind": "requires",
+          "evidence": [
+            "modify_payment_requires_different_method"
+          ]
+        },
+        {
+          "tool": "modify_pending_order_payment",
+          "kind": "requires",
+          "evidence": [
+            "modify_payment_gift_card_balance_v2"
+          ]
+        },
+        {
+          "tool": "modify_pending_order_payment",
+          "kind": "failure_modes",
+          "evidence": [
+            "modify_payment_requires_different_method"
+          ]
+        },
+        {
+          "tool": "modify_pending_order_payment",
+          "kind": "failure_modes",
+          "evidence": [
+            "modify_payment_gift_card_balance_v2"
+          ]
+        },
+        {
+          "tool": "return_delivered_order_items",
+          "kind": "requires",
+          "evidence": [
+            "return_requires_original_or_giftcard"
+          ]
+        },
+        {
+          "tool": "return_delivered_order_items",
+          "kind": "failure_modes",
+          "evidence": [
+            "return_requires_original_or_giftcard"
+          ]
+        }
+      ]
+    }
+  ],
   "policy_coverage": {
-    "covered": 15,
+    "covered": 19,
     "total": 60,
-    "fraction": 0.25,
+    "fraction": 0.31666666666666665,
     "paragraphs": [
       {
         "paragraph_id": "P0",
         "text": "# Retail agent policy",
         "rule_ids": [],
-        "reason": "Informational title heading with no actionable conditions"
+        "reason": "Title heading - no actionable rule"
       },
       {
         "paragraph_id": "P1",
         "text": "As a retail agent, you can help users:",
         "rule_ids": [],
-        "reason": "Informational introduction with no actionable conditions"
+        "reason": "Introduction heading - no actionable rule"
       },
       {
         "paragraph_id": "P2",
         "text": "- **cancel or modify pending orders**\n- **return or exchange delivered orders**\n- **modify their default user address**\n- **provide information about their own profile, orders, and related products**",
         "rule_ids": [],
-        "reason": "Informational capability list with no actionable conditions"
+        "reason": "Summary of capabilities - no actionable rule"
       },
       {
         "paragraph_id": "P3",
@@ -5817,7 +6576,7 @@
         "paragraph_id": "P4",
         "text": "Once the user has been authenticated, you can provide the user with information about order, product, profile information, e.g. help the user look up order id.",
         "rule_ids": [],
-        "reason": "Informational description of post-authentication capabilities with no actionable conditions"
+        "reason": "Informational - describes what can be done after authentication, no enforcement"
       },
       {
         "paragraph_id": "P5",
@@ -5855,7 +6614,7 @@
         "paragraph_id": "P9",
         "text": "You should deny user requests that are against this policy.",
         "rule_ids": [],
-        "reason": "General policy statement about denying invalid requests, covered by individual tool preconditions"
+        "reason": "General instruction to deny policy violations - no specific tool enforcement"
       },
       {
         "paragraph_id": "P10",
@@ -5869,138 +6628,139 @@
         "paragraph_id": "P11",
         "text": "## Domain basic",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P12",
         "text": "- All times in the database are EST and 24 hour based. For example \"02:30:00\" means 2:30 AM EST.",
         "rule_ids": [],
-        "reason": "Informational note about time format with no actionable conditions"
+        "reason": "Domain fact about time format - no tool enforcement"
       },
       {
         "paragraph_id": "P13",
         "text": "### User",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P14",
         "text": "Each user has a profile containing:",
         "rule_ids": [],
-        "reason": "Informational description of user profile structure with no actionable conditions"
+        "reason": "Descriptive text about user profile - no actionable rule"
       },
       {
         "paragraph_id": "P15",
         "text": "- unique user id\n- email\n- default address\n- payment methods.",
         "rule_ids": [],
-        "reason": "Informational list of user profile fields with no actionable conditions"
+        "reason": "List of user attributes - informational"
       },
       {
         "paragraph_id": "P16",
         "text": "There are three types of payment methods: **gift card**, **paypal account**, **credit card**.",
         "rule_ids": [],
-        "reason": "Informational description of payment method types with no actionable conditions"
+        "reason": "Describes payment method types - informational"
       },
       {
         "paragraph_id": "P17",
         "text": "### Product",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P18",
         "text": "Our retail store has 50 types of products.",
         "rule_ids": [],
-        "reason": "Informational statement about product count with no actionable conditions"
+        "reason": "Domain fact about product count - informational"
       },
       {
         "paragraph_id": "P19",
         "text": "For each **type of product**, there are **variant items** of different **options**.",
         "rule_ids": [],
-        "reason": "Informational description of product variants with no actionable conditions"
+        "reason": "Describes product variants - informational"
       },
       {
         "paragraph_id": "P20",
         "text": "For example, for a 't-shirt' product, there could be a variant item with option 'color blue size M', and another variant item with option 'color red size L'.",
         "rule_ids": [],
-        "reason": "Informational example of product variants with no actionable conditions"
+        "reason": "Example of variants - informational"
       },
       {
         "paragraph_id": "P21",
         "text": "Each product has the following attributes:",
         "rule_ids": [],
-        "reason": "Informational introduction to product attributes with no actionable conditions"
+        "reason": "Descriptive text - informational"
       },
       {
         "paragraph_id": "P22",
         "text": "- unique product id\n- name\n- list of variants",
         "rule_ids": [],
-        "reason": "Informational list of product attributes with no actionable conditions"
+        "reason": "List of product attributes - informational"
       },
       {
         "paragraph_id": "P23",
         "text": "Each variant item has the following attributes:",
         "rule_ids": [],
-        "reason": "Informational introduction to variant attributes with no actionable conditions"
+        "reason": "Descriptive text - informational"
       },
       {
         "paragraph_id": "P24",
         "text": "- unique item id\n- information about the value of the product options for this item.\n- availability\n- price",
         "rule_ids": [],
-        "reason": "Informational list of variant attributes with no actionable conditions"
+        "reason": "List of variant attributes - informational"
       },
       {
         "paragraph_id": "P25",
         "text": "Note: Product ID and Item ID have no relations and should not be confused!",
         "rule_ids": [],
-        "reason": "Informational note about ID distinction with no actionable conditions"
+        "reason": "Note about ID distinction - informational"
       },
       {
         "paragraph_id": "P26",
         "text": "### Order",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P27",
         "text": "Each order has the following attributes:",
         "rule_ids": [],
-        "reason": "Informational introduction to order attributes with no actionable conditions"
+        "reason": "Descriptive text - informational"
       },
       {
         "paragraph_id": "P28",
         "text": "- unique order id\n- user id\n- address\n- items ordered\n- status\n- fullfilments info (tracking id and item ids)\n- payment history",
         "rule_ids": [],
-        "reason": "Informational list of order attributes with no actionable conditions"
+        "reason": "List of order attributes - informational"
       },
       {
         "paragraph_id": "P29",
         "text": "The status of an order can be: **pending**, **processed**, **delivered**, or **cancelled**.",
         "rule_ids": [],
-        "reason": "Informational description of order status values with no actionable conditions"
+        "reason": "Describes order statuses - informational"
       },
       {
         "paragraph_id": "P30",
         "text": "Orders can have other optional attributes based on the actions that have been taken (cancellation reason, which items have been exchanged, what was the exchane price difference etc)",
         "rule_ids": [],
-        "reason": "Informational description of optional order attributes with no actionable conditions"
+        "reason": "Describes optional order attributes - informational"
       },
       {
         "paragraph_id": "P31",
         "text": "## Generic action rules",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P32",
         "text": "Generally, you can only take action on pending or delivered orders.",
         "rule_ids": [],
-        "reason": "General statement about action scope, covered by individual tool preconditions for pending/delivered status"
+        "reason": "General rule about order statuses - covered by specific status checks"
       },
       {
         "paragraph_id": "P33",
         "text": "Exchange or modify order tools can only be called once per order. Be sure that all items to be changed are collected into a list before making the tool call!!!",
         "rule_ids": [
+          "modify_payment_only_once",
           "collect_all_items_before_modify"
         ],
         "reason": null
@@ -6009,7 +6769,7 @@
         "paragraph_id": "P34",
         "text": "## Cancel pending order",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P35",
@@ -6031,13 +6791,13 @@
         "paragraph_id": "P37",
         "text": "After user confirmation, the order status will be changed to 'cancelled', and the total will be refunded via the original payment method immediately if it is gift card, otherwise in 5 to 7 business days.",
         "rule_ids": [],
-        "reason": "Informational description of cancellation side effects with no actionable conditions"
+        "reason": "Describes refund timing after cancellation - informational effect description"
       },
       {
         "paragraph_id": "P38",
         "text": "## Modify pending order",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P39",
@@ -6053,37 +6813,39 @@
         "paragraph_id": "P40",
         "text": "For a pending order, you can take actions to modify its shipping address, payment method, or product item options, but nothing else.",
         "rule_ids": [],
-        "reason": "Informational description of modification scope with no actionable conditions"
+        "reason": "Describes what can be modified - covered by specific modify tools"
       },
       {
         "paragraph_id": "P41",
         "text": "### Modify payment",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P42",
         "text": "The user can only choose a single payment method different from the original payment method.",
-        "rule_ids": [],
-        "reason": "No confirmed rule maps to this paragraph."
+        "rule_ids": [
+          "modify_payment_different_v3"
+        ],
+        "reason": null
       },
       {
         "paragraph_id": "P43",
         "text": "If the user wants the modify the payment method to gift card, it must have enough balance to cover the total amount.",
         "rule_ids": [],
-        "reason": "No confirmed rule maps to this paragraph."
+        "reason": "Gift card balance requirement for modify payment - tool enforces but probe construction failed due to ref resolution issues"
       },
       {
         "paragraph_id": "P44",
         "text": "After user confirmation, the order status will be kept as 'pending'. The original payment method will be refunded immediately if it is a gift card, otherwise it will be refunded within 5 to 7 business days.",
         "rule_ids": [],
-        "reason": "Informational description of payment modification side effects with no actionable conditions"
+        "reason": "Describes refund timing after payment modification - informational effect description"
       },
       {
         "paragraph_id": "P45",
         "text": "### Modify items",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P46",
@@ -6105,14 +6867,16 @@
       {
         "paragraph_id": "P48",
         "text": "The user must provide a payment method to pay or receive refund of the price difference. If the user provides a gift card, it must have enough balance to cover the price difference.",
-        "rule_ids": [],
-        "reason": "No confirmed rule maps to this paragraph."
+        "rule_ids": [
+          "exchange_gift_card_balance_v2"
+        ],
+        "reason": null
       },
       {
         "paragraph_id": "P49",
         "text": "## Return delivered order",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P50",
@@ -6126,31 +6890,33 @@
         "paragraph_id": "P51",
         "text": "The user needs to confirm the order id and the list of items to be returned.",
         "rule_ids": [],
-        "reason": "Informational description of return confirmation requirements with no actionable conditions"
+        "reason": "Describes confirmation requirement - covered by confirm_before_write conversation rule"
       },
       {
         "paragraph_id": "P52",
         "text": "The user needs to provide a payment method to receive the refund.",
         "rule_ids": [],
-        "reason": "Informational description of return payment method requirement, covered by return_requires_original_or_giftcard"
+        "reason": "Describes payment method requirement - covered by return_original_or_giftcard_v3"
       },
       {
         "paragraph_id": "P53",
         "text": "The refund must either go to the original payment method, or an existing gift card.",
-        "rule_ids": [],
-        "reason": "No confirmed rule maps to this paragraph."
+        "rule_ids": [
+          "return_original_or_giftcard_v3"
+        ],
+        "reason": null
       },
       {
         "paragraph_id": "P54",
         "text": "After user confirmation, the order status will be changed to 'return requested', and the user will receive an email regarding how to return items.",
         "rule_ids": [],
-        "reason": "Informational description of return side effects with no actionable conditions"
+        "reason": "Describes status change after return - informational effect description"
       },
       {
         "paragraph_id": "P55",
         "text": "## Exchange delivered order",
         "rule_ids": [],
-        "reason": "Informational section heading with no actionable conditions"
+        "reason": "Section heading - no actionable rule"
       },
       {
         "paragraph_id": "P56",
@@ -6171,14 +6937,16 @@
       {
         "paragraph_id": "P58",
         "text": "The user must provide a payment method to pay or receive refund of the price difference. If the user provides a gift card, it must have enough balance to cover the price difference.",
-        "rule_ids": [],
-        "reason": "No confirmed rule maps to this paragraph."
+        "rule_ids": [
+          "exchange_gift_card_balance_v2"
+        ],
+        "reason": null
       },
       {
         "paragraph_id": "P59",
         "text": "After user confirmation, the order status will be changed to 'exchange requested', and the user will receive an email regarding how to return items. There is no need to place a new order.\n",
         "rule_ids": [],
-        "reason": "Informational description of exchange side effects with no actionable conditions"
+        "reason": "Describes status change after exchange - informational effect description"
       }
     ]
   },
@@ -6581,89 +7349,5 @@
         "reason": "No confirmed rule maps to this paragraph."
       }
     ]
-  },
-  "audit": [
-    {
-      "kind": "instance_specific_rules",
-      "removed": [
-        "exchange_gift_card_balance",
-        "modify_items_gift_card_balance",
-        "modify_payment_gift_card_balance_v2",
-        "modify_payment_requires_different_method",
-        "return_requires_original_or_giftcard"
-      ],
-      "dropped_claims": [
-        {
-          "tool": "exchange_delivered_order_items",
-          "kind": "requires",
-          "evidence": [
-            "exchange_gift_card_balance"
-          ]
-        },
-        {
-          "tool": "exchange_delivered_order_items",
-          "kind": "failure_modes",
-          "evidence": [
-            "exchange_gift_card_balance"
-          ]
-        },
-        {
-          "tool": "modify_pending_order_items",
-          "kind": "requires",
-          "evidence": [
-            "modify_items_gift_card_balance"
-          ]
-        },
-        {
-          "tool": "modify_pending_order_items",
-          "kind": "failure_modes",
-          "evidence": [
-            "modify_items_gift_card_balance"
-          ]
-        },
-        {
-          "tool": "modify_pending_order_payment",
-          "kind": "requires",
-          "evidence": [
-            "modify_payment_requires_different_method"
-          ]
-        },
-        {
-          "tool": "modify_pending_order_payment",
-          "kind": "requires",
-          "evidence": [
-            "modify_payment_gift_card_balance_v2"
-          ]
-        },
-        {
-          "tool": "modify_pending_order_payment",
-          "kind": "failure_modes",
-          "evidence": [
-            "modify_payment_requires_different_method"
-          ]
-        },
-        {
-          "tool": "modify_pending_order_payment",
-          "kind": "failure_modes",
-          "evidence": [
-            "modify_payment_gift_card_balance_v2"
-          ]
-        },
-        {
-          "tool": "return_delivered_order_items",
-          "kind": "requires",
-          "evidence": [
-            "return_requires_original_or_giftcard"
-          ]
-        },
-        {
-          "tool": "return_delivered_order_items",
-          "kind": "failure_modes",
-          "evidence": [
-            "return_requires_original_or_giftcard"
-          ]
-        }
-      ]
-    }
-  ]
+  }
 }

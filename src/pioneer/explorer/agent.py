@@ -15,7 +15,7 @@ from pioneer.paths import TAU2_DIR, TAU2_DATA_DIR, TAU2_COMMIT, HOLDOUT_DIR
 from .rules import check_rule
 from .source import extract_tools, extract_models
 from .coverage import policy_coverage, save_world_model
-from .validation import collect_identifiers, instance_identifiers
+from .validation import accepted_calls, collect_identifiers, failing_calls, instance_identifiers
 from .effects import observed_effects, schema_enums
 
 
@@ -224,6 +224,11 @@ class ExplorerAgent:
         label = ("contradicted" if not records[0]["execution"]["ok"] else
                  "confirmed_by_tool" if not records[1]["execution"]["ok"] else
                  "policy_only" if policy_quote else "unconfirmed")
+        if label == "confirmed_by_tool":
+            bad = failing_calls(rule, accepted_calls(tool, self.observations, accepted), self.case)
+            if bad:
+                raise ValueError(f"the check is false on calls the tool accepted ({bad[:3]}), so it is broader than "
+                                 "the condition it describes; restrict it to the cases the text is about")
         record = dict(rule, policy_quote=policy_quote, classification=label, cases=records)
         self.probes[rule_id] = record
         return record
@@ -324,7 +329,7 @@ class ExplorerAgent:
             # [INDEPENDENT] Gaps handed to the review come from the world model's own data: rules an
             # earlier run had to discard, and the conditions the accepted rules already check.
             redo = [{k: r.get(k) for k in ("rule_id", "tools", "text", "policy_quote")}
-                    for r in self.seed.get("discarded_rules", []) if r.get("classification") == "instance_specific"]
+                    for r in self.seed.get("discarded_rules", []) if r.get("classification") in {"instance_specific", "over_broad"}]
             checked = {tool: [r["text"] for r in self.seed["rules"] if tool in r["tools"]]
                        for tool in sorted(n for n, t in self.methods.items() if t.get("tool_type") == "write")}
             effects = {tool: [e["effect"] for e in s.get("observed_effects", [])] for tool, s in self.seed["actions"].items()
@@ -335,8 +340,9 @@ class ExplorerAgent:
                 "A paragraph that is already mapped can still contain conditions that no rule checks: for every write "
                 "tool, compare each condition that its policy sentences and its source code state with the conditions "
                 "the accepted rules already check (listed below), and probe each condition that has no rule of its own. "
-                "The rules listed under 'rewrite' were discarded because their checks hard-coded one entity's "
-                "identifiers; probe the same conditions again with refs so that they hold for every entity. "
+                "The rules listed under 'rewrite' were discarded because their checks either hard-coded one entity's "
+                "identifiers or were false on calls the tool accepted (broader than the text); probe the same conditions "
+                "again with refs, restricted to exactly the cases the text is about. "
                 "Where an observed effect may depend on the state of an entity involved, observe the other states too. "
                 "Use available query_data and source tools. Prefer batched paired probes and finish this review within 25 turns. "
                 "Do not repeat prior observations or submit all existing action descriptions. "

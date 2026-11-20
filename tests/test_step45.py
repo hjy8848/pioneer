@@ -169,3 +169,21 @@ def test_review_claims_must_be_objects(tmp_path):
     agent = ExplorerAgent(MockLLM([]), holdout).continue_from(WORLD)
     with pytest.raises(ValueError, match="must be objects"):
         agent.complete_review(new_claims={"cancel_pending_order": {"requires": ["just a sentence"]}})
+
+
+def test_audit_removes_a_tool_rule_that_rejects_a_call_the_tool_accepted(tmp_path, env):
+    """Seen 2026-11-20: a gift-card branch written as 'payment_methods.args.payment_method_id.source' never matched."""
+    holdout = tmp_path / "h.json"
+    holdout.write_text("[]")
+    agent = ExplorerAgent(MockLLM([]), holdout)
+    pending = env.query_data("orders", [("status", "eq", "pending")], limit=1)[0]["order_id"]
+    accepted_call = dict(tool="cancel_pending_order", arguments=dict(order_id=pending, reason="ordered by mistake"),
+                         patches=[], setup=[], execution=dict(ok=True))
+    too_narrow_reason = {"compare": [{"ref": "args.reason"}, "eq", "no longer needed"]}
+    world = dict(rules=[dict(rule_id="r", tools=["cancel_pending_order"], text="t", check=too_narrow_reason,
+                             classification="confirmed_by_tool", level="state", per_item=False, cases=[])],
+                 discarded_rules=[], conversation_rules=[], actions={}, observations={"obs": accepted_call})
+    audited, report = audit_world_model(world, set(), "policy", agent.case)
+    assert report["removed"] == ["r"] and audited["discarded_rules"][0]["classification"] == "over_broad"
+    world["rules"][0]["classification"] = "policy_only"  # policy-only rules may fail on tool-accepted calls
+    assert audit_world_model(world, set(), "policy", agent.case)[1]["removed"] == []

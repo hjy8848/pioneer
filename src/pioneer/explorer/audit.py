@@ -10,13 +10,17 @@ from collections import Counter
 from copy import deepcopy
 
 from .coverage import policy_coverage
-from .validation import instance_identifiers
+from .validation import accepted_calls, failing_calls, instance_identifiers
 
 ACTIVE = {"confirmed_by_tool", "policy_only"}
 
 
-def audit_world_model(world: dict, identifiers: set, policy: str):
-    """Return (audited_world, report). ``world`` is not modified."""
+def audit_world_model(world: dict, identifiers: set, policy: str, build_case=None):
+    """Return (audited_world, report). ``world`` is not modified.
+
+    With ``build_case`` (tool, arguments, patches, setup -> env) a tool-enforced rule whose
+    check is false on a call the tool accepted is also removed as ``over_broad``.
+    """
     world = deepcopy(world)
     removed, kept = {}, []
     for rule in world["rules"]:
@@ -27,6 +31,16 @@ def audit_world_model(world: dict, identifiers: set, policy: str):
                 previous_classification=rule["classification"]), classification="instance_specific")
         else:
             kept.append(rule)
+    if build_case is not None:
+        for rule in list(kept):
+            if rule["classification"] != "confirmed_by_tool":
+                continue  # a policy-only rule is expected to fail on some calls the tool accepts
+            failing = failing_calls(rule, accepted_calls(rule["tools"][0], world.get("observations", {}), kept), build_case)
+            if failing:
+                kept.remove(rule)
+                removed[rule["rule_id"]] = dict(rule, audit=dict(
+                    reason="check is false on calls the tool accepted", calls=failing,
+                    previous_classification=rule["classification"]), classification="over_broad")
     by_id = {r["rule_id"]: r for r in kept}
     dropped_claims = []
     for tool, summary in world["actions"].items():
@@ -56,5 +70,6 @@ def audit_world_model(world: dict, identifiers: set, policy: str):
                   coverage=dict(covered=world["policy_coverage"]["covered"], total=world["policy_coverage"]["total"]))
     if removed:
         world.setdefault("audit", []).append(dict(
-            kind="instance_specific_rules", removed=sorted(removed), dropped_claims=dropped_claims))
+            kind="rule_audit", removed={k: v["classification"] for k, v in sorted(removed.items())},
+            dropped_claims=dropped_claims))
     return world, report

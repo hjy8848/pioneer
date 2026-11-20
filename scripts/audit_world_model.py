@@ -19,14 +19,21 @@ def main():
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     os.environ.setdefault("TAU2_DATA_DIR", str(TAU2_DATA_DIR))
+    import tempfile
     from pioneer.env import RetailSynthEnv
+    from pioneer.explorer.agent import ExplorerAgent
     from pioneer.explorer.audit import audit_world_model
     from pioneer.explorer.validation import collect_identifiers
+    from pioneer.llm import MockLLM
 
     env = RetailSynthEnv()
     env.init()
     world = json.loads(args.world.read_text(encoding="utf-8-sig"))
-    audited, report = audit_world_model(world, collect_identifiers(env), env.get_metadata()["policy"])
+    with tempfile.TemporaryDirectory() as tmp:  # replays recorded calls; their holdout filtering already happened
+        holdout = Path(tmp) / "holdout.json"
+        holdout.write_text("[]", encoding="utf-8")
+        cases = ExplorerAgent(MockLLM([]), holdout).case
+        audited, report = audit_world_model(world, collect_identifiers(env), env.get_metadata()["policy"], cases)
     print(json.dumps(report, indent=2, ensure_ascii=False))
     if args.apply and report["removed"]:
         args.world.write_text(json.dumps(audited, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

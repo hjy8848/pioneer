@@ -75,7 +75,9 @@ RULE_DSL_HELP = (
     + ",".join(_OPS)
     + ". Refs args/order/user/payment/original_payment/required_amount are grounded by "
     "query_data. With per_item=true refs args.item_id,args.new_item_id,item.product_id "
-    "iterate item pairs. Express every fact about a specific entity through a ref, never "
+    "iterate item pairs. A where-clause field path may embed an argument value as "
+    "{argument_name}, e.g. 'payment_methods.{payment_method_id}.source'; the word 'args' "
+    "inside a field path is not resolved. Express every fact about a specific entity through a ref, never "
     "as a literal identifier copied from your probe case: literal entity identifiers make "
     "the rule true for one instance only and the program rejects them."
 )

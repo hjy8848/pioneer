@@ -2,6 +2,7 @@
 import hashlib
 import itertools
 import json
+import random
 import threading
 import time
 from copy import deepcopy
@@ -29,7 +30,11 @@ class LiteLLMClient:
         # rotate over them. The cache key keeps the whole list, so a cached answer is found no
         # matter which replica produced it.
         self.api_base, self.api_key = api_base, api_key
-        self._bases = itertools.cycle([b.strip() for b in api_base.split(",")]) if api_base else None
+        # Each client starts at a random replica: worker processes start together, and a shared
+        # starting point put 15 of 20 first requests on one replica.
+        bases = [b.strip() for b in api_base.split(",")] if api_base else []
+        start = random.randrange(len(bases)) if bases else 0
+        self._bases = itertools.cycle(bases[start:] + bases[:start]) if bases else None
         self._lock = threading.Lock()
         self.records = []
         self.usage = dict(calls=0, cache_hits=0, prompt_tokens=0, completion_tokens=0,

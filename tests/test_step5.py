@@ -317,6 +317,7 @@ def test_client_rotates_over_replicas_and_caches_independently_of_replica(tmp_pa
             _hidden_params={"response_cost": 0.0})
 
     monkeypatch.setattr(litellm, "completion", completion)
+    monkeypatch.setattr("random.randrange", lambda n: 0)  # start at the first replica
     client = LiteLLMClient("m", 0, 0, tmp_path, api_base="http://a/v1, http://b/v1")
     for text in ("1", "2", "3"):
         client.chat([{"role": "user", "content": text}])

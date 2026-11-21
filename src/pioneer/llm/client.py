@@ -17,10 +17,11 @@ class LiteLLMClient:
     def __init__(self, model, temperature, seed, cache_dir, *, api_base=None, api_key=None, max_tokens=16000,
                  timeout=120, retries=4, backoff=30, enable_thinking=None):
         self.params = dict(model=model, temperature=temperature, seed=seed, max_tokens=max_tokens)
-        if enable_thinking is not None:
-            # [INDEPENDENT] Qwen3.5+ chat-template switch, sent to vLLM for every role. Part of the
-            # request, hence of the cache key; left out when unset so existing cache keys still match.
-            self.params["extra_body"] = {"chat_template_kwargs": {"enable_thinking": bool(enable_thinking)}}
+        # [INDEPENDENT] Qwen3.5+ chat-template thinking switch sent to vLLM: one bool for every role,
+        # or {role: bool} with an optional "default" (roles: explorer, evolver, initializer, verifier,
+        # agent, user_simulator). It is part of the request, hence of the cache key; a role it does not
+        # cover sends nothing, so cache keys made without the switch still match.
+        self.thinking = enable_thinking
         self.timeout = timeout  # per-request seconds; deliberately not part of the cache key
         self.retries, self.backoff = retries, backoff  # waits backoff, 2*backoff, ... (capped at 300 s)
         self.cache_dir = Path(cache_dir)
@@ -48,8 +49,16 @@ class LiteLLMClient:
                 print(f"transient {type(exc).__name__}; retry {attempt + 1}/{self.retries} in {wait}s", flush=True)
                 time.sleep(wait)
 
-    def _request(self, messages, **options):
+    def _thinking(self, role):
+        if isinstance(self.thinking, dict):
+            return self.thinking.get(role, self.thinking.get("default"))
+        return self.thinking
+
+    def _request(self, messages, role=None, **options):
         request = dict(self.params, messages=messages, **options)
+        thinking = self._thinking(role)
+        if thinking is not None:
+            request["extra_body"] = {"chat_template_kwargs": {"enable_thinking": bool(thinking)}}
         key = hashlib.sha256(json.dumps(dict(request, api_base=self.api_base),
                                        sort_keys=True).encode()).hexdigest()
         path = self.cache_dir / f"{key}.json"
@@ -83,15 +92,15 @@ class LiteLLMClient:
                                     "cost_usd": cost}, ensure_ascii=False, indent=2), encoding="utf-8")
         return message
 
-    def json(self, messages):
-        return json.loads(self._request(messages, response_format={"type": "json_object"})["content"])
+    def json(self, messages, role=None):
+        return json.loads(self._request(messages, role, response_format={"type": "json_object"})["content"])
 
-    def chat(self, messages, tools=None, seed=None):
+    def chat(self, messages, tools=None, seed=None, role=None):
         """[INDEPENDENT] Cache native tool-use messages, including tool calls."""
         options = dict(tools=tools, tool_choice="auto") if tools else {}
         if seed is not None:
             options["seed"] = seed
-        return self._request(messages, **options)
+        return self._request(messages, role, **options)
 
 
 class MockLLM:
@@ -104,12 +113,12 @@ class MockLLM:
         self.usage = dict(calls=0, cache_hits=0, prompt_tokens=0, completion_tokens=0,
                           cost_usd=0.0, unknown_cost_calls=0)
 
-    def json(self, messages):
+    def json(self, messages, role=None):
         self.requests.append(deepcopy(messages))
         self.usage["calls"] += 1
         return deepcopy(next(self.responses))
 
-    def chat(self, messages, tools=None, seed=None):
+    def chat(self, messages, tools=None, seed=None, role=None):
         self.requests.append(deepcopy(dict(messages=messages, tools=tools)))
         self.usage["calls"] += 1
         return deepcopy(next(self.responses))

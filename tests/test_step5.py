@@ -342,7 +342,11 @@ def test_thinking_switch_is_sent_and_keys_the_cache(tmp_path, monkeypatch):
     messages = [{"role": "user", "content": "hi"}]
     LiteLLMClient("m", 0, 0, tmp_path).chat(messages)
     LiteLLMClient("m", 0, 0, tmp_path, enable_thinking=False).chat(messages)  # a different request: not a cache hit
-    assert sent == [None, {"chat_template_kwargs": {"enable_thinking": False}}]
+    per_role = LiteLLMClient("m", 0, 0, tmp_path, enable_thinking={"default": True, "verifier": False})
+    per_role.chat(messages, role="verifier")     # same request as the all-off call above: cached
+    per_role.chat(messages, role="initializer")  # falls back to default: thinking on, sent
+    assert sent == [None] + [{"chat_template_kwargs": {"enable_thinking": v}} for v in (False, True)]
+    assert per_role.usage["cache_hits"] == 1
 
 
 # -- pipeline control flow ------------------------------------------------------------------------

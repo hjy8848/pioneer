@@ -31,7 +31,7 @@ class VerifierAgent:
                 world_model_rules=[{k:r[k] for k in ("rule_id", "tools", "text", "check", "classification")}
                                    for r in self.engine.knowledge.get("rules", [])]), ensure_ascii=False)}]
         for turn in range(max_turns):
-            message = self.llm.chat(messages, TOOLS)
+            message = self.llm.chat(messages, TOOLS, role="verifier")
             messages.append(message)
             for call in message.get("tool_calls", []):
                 name = call["function"]["name"]

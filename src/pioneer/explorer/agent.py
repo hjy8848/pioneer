@@ -351,7 +351,7 @@ class ExplorerAgent:
         trace = []
         for turn in range(max_turns):
             print(f"Explorer turn {turn + 1}/{max_turns}", flush=True)
-            message = self.llm.chat(messages, active_tools)
+            message = self.llm.chat(messages, active_tools, role="explorer")
             messages.append(message)
             calls = message.get("tool_calls") or []
             if not calls:

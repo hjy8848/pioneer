@@ -109,7 +109,7 @@ class EvolverAgent:
         self.trace = []
         for turn in range(max_turns):
             print(f"Evolver {scenario_id} turn={turn + 1}", flush=True)
-            message = self.llm.chat(messages, TOOLS)
+            message = self.llm.chat(messages, TOOLS, role="evolver")
             messages.append(message)
             for call in message.get("tool_calls", []):
                 name = call["function"]["name"]

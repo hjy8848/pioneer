@@ -11,9 +11,12 @@ tau2:
 llm:
   # One backbone for all synthesis roles, as in the blog (model is our choice; blog's is unnamed).
   model: openai/qwen3.6-35b-a3b  # vLLM --served-model-name
-  enable_thinking: false    # all roles; thinking roughly doubled per-call latency in the smoke test
+  # Thinking per role. With thinking off everywhere (evolve_q36_nothink_11210211) the Initializer
+  # misused query_data, one call rambled to the 16000-token cap without a tool call, and the round
+  # overflowed the context. Roles that only follow a script or write a diagnosis stay off.
+  enable_thinking: {default: true, verifier: false, user_simulator: false}
   temperature: 0.0
-  max_tokens: 16000
+  max_tokens: 4096          # one reply never needs more; caps a rambling turn at ~1 min instead of ~3.5
   timeout: 600
   cache_dir: data/cache/llm
 

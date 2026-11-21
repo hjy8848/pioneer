@@ -21,9 +21,18 @@ FATAL = {"RateLimitError", "AuthenticationError", "APIConnectionError", "Interna
 
 def run_rounds(scenario, candidate_id, *, knowledge, params, verifier_cfg, seed_instances, append,
                ledger_factory, pool_size=20, rounds=5, start_round=0, parent=None,
-               previous=None, diagnosis=None, atomic_action=None):
-    """Run up to ``rounds`` attempts. Returns (accepted_record | None, previous, diagnosis)."""
+               previous=None, diagnosis=None, atomic_action=None, archive=None):
+    """Run up to ``rounds`` attempts. Returns (accepted_record | None, previous, diagnosis).
+
+    ``archive(name, data)``, when given, receives each round's full Initializer conversation and
+    the cache keys of every model call of the round (grounding, Verifier agent, E8 participants).
+    """
     seen = set(seed_instances)
+
+    def keep(round_no, initializer, client):
+        if archive:
+            archive(f"round{round_no}", dict(candidate_id=candidate_id, round=round_no,
+                                             initializer_messages=initializer.messages, llm_calls=client.records))
     last_inputs = None
     for round_no in range(start_round, start_round + rounds):
         # [INDEPENDENT] A round fed the same proposal and diagnosis as the last one replays it (seeded
@@ -54,6 +63,7 @@ def run_rounds(scenario, candidate_id, *, knowledge, params, verifier_cfg, seed_
                 llm_usage=client.usage, initializer_trace=initializer.trace,
                 preflight_submissions=initializer.submissions)
             append(record)
+            keep(round_no, initializer, client)
             print(f"{candidate_id} passed={report.passed} codes={[c.value for c in report.failure_codes]}", flush=True)
             if report.passed:
                 return record, previous, diagnosis
@@ -68,6 +78,7 @@ def run_rounds(scenario, candidate_id, *, knowledge, params, verifier_cfg, seed_
                 validation_usage={k: client.usage[k] - generation[k] for k in generation} if generation else {},
                 llm_usage=dict(client.usage), initializer_trace=initializer.trace,
                 preflight_submissions=initializer.submissions))
+            keep(round_no, initializer, client)
             print(f"{candidate_id} {diagnosis}", flush=True)
             if type(exc).__name__ in FATAL:
                 raise

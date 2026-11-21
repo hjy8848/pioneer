@@ -403,7 +403,7 @@ def test_thinking_switch_is_sent_and_keys_the_cache(tmp_path, monkeypatch):
 # -- pipeline control flow ------------------------------------------------------------------------
 class FakeClient:
     def __init__(self, **params):
-        self.params, self.usage = params, dict(calls=0, cost_usd=0.0)
+        self.params, self.usage, self.records = params, dict(calls=0, cost_usd=0.0), [dict(cache_key="k")]
 
 
 class Verdict:
@@ -421,6 +421,7 @@ def stub_pipeline(monkeypatch, steps):
     class Init:
         def __init__(self, *a):
             self.trace, self.submissions, self.last_proposal = [], [], None
+            self.messages = [dict(role="system", content="initializer prompt")]
 
         def run(self, *a, **k):
             state["step"] = next(script)
@@ -473,6 +474,17 @@ def test_evolver_rewrites_a_scenario_the_rounds_could_not_fix(monkeypatch):
     assert revisions[0][0] is first and revisions[0][1]["failed_checks"] == []  # compacted report, no transcripts
     assert [w["round"] for w in written] == [0, 1, 2]  # round numbers continue across versions
     assert written[-1]["atomic_action"] == "cancel_pending_order|modify_user_address@complete"
+
+
+def test_every_round_archives_its_full_conversation_and_call_keys(monkeypatch):
+    stub_pipeline(monkeypatch, ["error", "admit"])
+    kept = {}
+    pipeline.run_rounds(scenario("cancel_pending_order", depth=0), "cid", knowledge={}, params=dict(seed=0),
+        verifier_cfg=dict(e2e_trials=1), seed_instances=(), append=lambda r: None, ledger_factory=lambda: None,
+        rounds=5, archive=lambda name, data: kept.update({name: data}))
+    assert sorted(kept) == ["round0", "round1"]  # the failed round too
+    assert kept["round0"]["initializer_messages"][0]["content"] == "initializer prompt"
+    assert kept["round1"]["llm_calls"] == [dict(cache_key="k")]
 
 
 def test_rewrites_stop_at_the_budget_and_a_failed_rewrite_queues(monkeypatch):

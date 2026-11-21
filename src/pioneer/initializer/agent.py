@@ -145,7 +145,7 @@ class InitializerAgent:
     def __init__(self, llm, knowledge, holdout_path):
         self.llm, self.knowledge = llm, knowledge
         self.toolbox = ExplorerAgent(llm, holdout_path)
-        self.trace = []
+        self.trace, self.messages = [], []
         self.queried = False
         self.last_proposal = None
         # [INDEPENDENT] Every submit_candidate attempt and why it failed, so the
@@ -184,6 +184,7 @@ class InitializerAgent:
         messages = [dict(role="system", content=build_system(metadata, scenario.depth)),
                     dict(role="user", content=json.dumps(payload))]
         self.trace, self.submissions, self.queried = [], [], False
+        self.messages = messages  # the full conversation, kept for the run archive
         for turn in range(max_turns):
             print(f"Initializer {candidate_id} turn={turn + 1}", flush=True)
             message = self.llm.chat(messages, TOOLS, role="initializer")

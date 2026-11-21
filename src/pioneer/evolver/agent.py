@@ -103,7 +103,7 @@ class EvolverAgent:
     def __init__(self, llm, knowledge, holdout_path, max_depth=4):
         self.llm, self.knowledge, self.max_depth = llm, knowledge, max_depth
         self.toolbox = ExplorerAgent(llm, holdout_path)
-        self.trace = []
+        self.trace, self.messages = [], []
 
     def run(self, parent_row: dict, parent: Scenario, stressor: Stressor, scenario_id: str, gaps: dict, max_turns=12,
             revision=None) -> Scenario:
@@ -122,7 +122,7 @@ class EvolverAgent:
                 "Initializer reworked its grounding; the diagnosis says why. Submit a different scenario "
                 "that removes the cause. Keep the same parent and stressor."))
         messages = [dict(role="system", content=build_system(metadata)), dict(role="user", content=json.dumps(payload))]
-        self.trace = []
+        self.trace, self.messages = [], messages  # the full conversation, kept for the run archive
         for turn in range(max_turns):
             print(f"Evolver {scenario_id} turn={turn + 1}", flush=True)
             message = self.llm.chat(messages, TOOLS, role="evolver")

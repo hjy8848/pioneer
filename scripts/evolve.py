@@ -69,10 +69,23 @@ def worker(args, config):
 
     stressor = Stressor(assignment["stressor"])
 
+    archive_dir = folder / "archive"
+
+    def archive(name, data):
+        """Full conversations and model-call cache keys, one file each, outside the ledger."""
+        archive_dir.mkdir(exist_ok=True)
+        (archive_dir / f"{name}.json").write_text(json.dumps(data, ensure_ascii=False, indent=1, default=str),
+                                                  encoding="utf-8")
+
     def evolve(revision=None):
         client = LiteLLMClient(**params)
         evolver = EvolverAgent(client, world, HOLDOUT_DIR / "users.json", config["evolution"]["max_depth"])
-        made = evolver.run(parent_row, parent, stressor, cid, assignment["gaps"], revision=revision)
+        version = len(list(archive_dir.glob("evolver_v*.json"))) if archive_dir.exists() else 0
+        try:
+            made = evolver.run(parent_row, parent, stressor, cid, assignment["gaps"], revision=revision)
+        finally:  # a failed Evolver run is archived too
+            archive(f"evolver_v{version}", dict(candidate_id=cid, revision=revision, messages=evolver.messages,
+                                                trace=evolver.trace, llm_calls=client.records))
         return made, dict(scenario=made.model_dump(mode="json"), usage=client.usage, trace=evolver.trace)
 
     if scenario_path.exists():  # an interrupted candidate keeps its scenario; no second Evolver call
@@ -110,7 +123,7 @@ def worker(args, config):
     record, previous, diagnosis, scenario = run_with_rewrites(
         scenario, cid, revise=revise, rewrites=rewrites, knowledge=world, params=params,
         verifier_cfg=config["verifier"], seed_instances={r["meta"]["instance_signature"] for r in pool},
-        append=append, ledger_factory=ledger, rounds=config["rework"]["rounds_per_batch"],
+        append=append, ledger_factory=ledger, rounds=config["rework"]["rounds_per_batch"], archive=archive,
         start_round=max((r["round"] for r in history), default=-1) + 1,
         parent=dict(task=parent_row["task"], meta={k: v for k, v in parent_row["meta"].items() if k != "verifier_report"}),
         previous=prior.get("proposal") or (dict(task=prior["task"], meta=prior["meta"]) if "task" in prior else None),
@@ -127,9 +140,17 @@ def driver(args, config):
     from pioneer.evolver import CoverageTracker
     from pioneer.stats.ledger import summarize_ledger
 
+    from pioneer.manifest import write_manifest
+    from pioneer.schemas import Stressor
+
     world = json.loads((REPO_ROOT / "data/knowledge/retail_world_model.json").read_text(encoding="utf-8"))
     evolution = config["evolution"]
     args.out.mkdir(parents=True, exist_ok=True)
+    if not args.plan_only:
+        entry = write_manifest(args.out, args.config)
+        print(f"manifest: commit {entry['git']['commit']} uncommitted={entry['git']['uncommitted_changes']} "
+              f"models={[m['models'].get('data', [{}])[0].get('id') if isinstance(m['models'], dict) else None for m in entry['served_models']]}",
+              flush=True)
     generations = args.generations or evolution["generations"]
     per_generation = args.per_generation or evolution["candidates_per_generation"]
     for generation in range(1, generations + 1):
@@ -140,10 +161,16 @@ def driver(args, config):
         if plan_path.exists():
             plan = json.loads(plan_path.read_text(encoding="utf-8"))
         else:
+            if args.parent:  # a chosen (parent, stressor), e.g. for a single acceptance run
+                if not any(r["task"]["id"] == args.parent for r in pool):
+                    raise SystemExit(f"--parent {args.parent} is not an admitted task of the pool")
+                chosen = [dict(slot=0, parent_id=args.parent, stressor=Stressor(args.stressor).value)]
+            else:
+                chosen = tracker.plan(per_generation, f"{config['seed']}:g{generation}")
             # Ids carry the run folder: every run restarting at evo:g1:s0 reused ids across runs.
             plan = dict(generation=generation, coverage=tracker.summary(),
                         assignments=[dict(a, cid=f"evo:{args.out.name}:g{generation}:s{a['slot']}", gaps=tracker.gaps())
-                                     for a in tracker.plan(per_generation, f"{config['seed']}:g{generation}")])
+                                     for a in chosen])
             taken = {r["task"]["id"] for r in pool} & {a["cid"] for a in plan["assignments"]}
             if taken:
                 raise SystemExit(f"candidate ids already in the pool: {sorted(taken)}; use a new --out folder")
@@ -201,7 +228,13 @@ def main():
     parser.add_argument("--plan-only", action="store_true")
     parser.add_argument("--worker", help="(internal) assignment json to run in this process")
     parser.add_argument("--config", type=Path, default=Path("configs/retail.yaml"))
+    parser.add_argument("--parent", help="evolve this admitted task (one candidate, one generation); needs --stressor")
+    parser.add_argument("--stressor", help="stressor for --parent: chain, multi_entity, policy_pushback, conditional, underspecified, reasoning")
     args = parser.parse_args()
+    if bool(args.parent) != bool(args.stressor):
+        parser.error("--parent and --stressor go together")
+    if args.parent and (args.generations or 1) != 1:
+        parser.error("--parent runs a single generation")
     # Each worker runs one candidate's agents one call at a time, so the cap is how many calls are in
     # flight at once: 4 suits the shared gateway, a self-hosted vLLM takes 30 or more.
     if not 1 <= args.workers <= 64:

@@ -50,7 +50,7 @@ def worker(args, config):
     from pioneer.initializer.contract import scenario_key
     from pioneer.initializer.diversity import EntityLedger
     from pioneer.llm import LiteLLMClient
-    from pioneer.pipeline import run_rounds
+    from pioneer.pipeline import run_with_rewrites
     from pioneer.schemas import Scenario, Stressor
 
     assignment = json.loads(Path(args.worker).read_text(encoding="utf-8"))
@@ -67,14 +67,30 @@ def worker(args, config):
     parent_row = next(r for r in pool if r["task"]["id"] == assignment["parent_id"])
     parent = parent_scenario(parent_row)
 
-    if scenario_path.exists():  # an interrupted candidate keeps its scenario; no second Evolver call
-        scenario = Scenario.model_validate(json.loads(scenario_path.read_text(encoding="utf-8"))["scenario"])
-    else:
+    stressor = Stressor(assignment["stressor"])
+
+    def evolve(revision=None):
         client = LiteLLMClient(**params)
         evolver = EvolverAgent(client, world, HOLDOUT_DIR / "users.json", config["evolution"]["max_depth"])
-        scenario = evolver.run(parent_row, parent, Stressor(assignment["stressor"]), cid, assignment["gaps"])
-        scenario_path.write_text(json.dumps(dict(scenario=scenario.model_dump(mode="json"), usage=client.usage,
-                                                 trace=evolver.trace), ensure_ascii=False, indent=2), encoding="utf-8")
+        made = evolver.run(parent_row, parent, stressor, cid, assignment["gaps"], revision=revision)
+        return made, dict(scenario=made.model_dump(mode="json"), usage=client.usage, trace=evolver.trace)
+
+    if scenario_path.exists():  # an interrupted candidate keeps its scenario; no second Evolver call
+        saved = json.loads(scenario_path.read_text(encoding="utf-8"))
+        scenario = Scenario.model_validate(saved["scenario"])
+    else:
+        scenario, saved = evolve()
+        scenario_path.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
+    saved.setdefault("revisions", [])
+
+    def revise(old, diagnosis):
+        """The Evolver redoes the scenario; scenario.json keeps every earlier version and why it failed."""
+        made, entry = evolve(dict(scenario=old.model_dump(mode="json"), diagnosis=diagnosis))
+        saved["revisions"].append(dict(replaced=saved["scenario"], diagnosis=diagnosis, usage=entry["usage"],
+                                       trace=entry["trace"]))
+        saved.update(scenario=entry["scenario"], usage=entry["usage"], trace=entry["trace"])
+        scenario_path.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
+        return made
 
     env = RetailSynthEnv()
     env.init()
@@ -88,14 +104,17 @@ def worker(args, config):
         with ledger_path.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    prior = history[-1] if history else {}
-    record, previous, diagnosis = run_rounds(
-        scenario, cid, knowledge=world, params=params, verifier_cfg=config["verifier"],
-        seed_instances={r["meta"]["instance_signature"] for r in pool}, append=append, ledger_factory=ledger,
-        rounds=config["rework"]["rounds_per_batch"], start_round=max((r["round"] for r in history), default=-1) + 1,
+    # resuming: the last round's proposal and diagnosis carry over only if it was about the current scenario
+    prior = history[-1] if history and history[-1].get("scenario") == saved["scenario"] else {}
+    rewrites = max(0, config["rework"].get("scenario_rewrites", 2) - len(saved["revisions"]))
+    record, previous, diagnosis, scenario = run_with_rewrites(
+        scenario, cid, revise=revise, rewrites=rewrites, knowledge=world, params=params,
+        verifier_cfg=config["verifier"], seed_instances={r["meta"]["instance_signature"] for r in pool},
+        append=append, ledger_factory=ledger, rounds=config["rework"]["rounds_per_batch"],
+        start_round=max((r["round"] for r in history), default=-1) + 1,
         parent=dict(task=parent_row["task"], meta={k: v for k, v in parent_row["meta"].items() if k != "verifier_report"}),
         previous=prior.get("proposal") or (dict(task=prior["task"], meta=prior["meta"]) if "task" in prior else None),
-        diagnosis=prior.get("error") or prior.get("report"), atomic_action=scenario_key(scenario))
+        diagnosis=prior.get("error") or prior.get("report"))
     queue = folder / "rework_queue.json"
     if record is None:
         queue.write_text(json.dumps([dict(candidate_id=cid, scenario=scenario.model_dump(mode="json"), previous=previous,

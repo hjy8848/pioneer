@@ -10,6 +10,7 @@ from collections import Counter
 
 from pioneer.explorer import ExplorerAgent
 from pioneer.explorer.agent import function
+from pioneer.initializer.contract import infeasible
 from pioneer.schemas import ExpectedOutcome, Scenario, Stressor
 
 TOOLS = [
@@ -39,11 +40,14 @@ Stressors:
 - multi_entity: keep the parent's intents and add intents of atomic actions the parent already
   has, on further entities of the same user.
 - policy_pushback: the user insists on a request the rules forbid. expected_outcome is refuse
-  (nothing may change) or partial (the permitted part is done, the forbidden part refused).
-  Confirm with sandbox_execute that the forbidden request is rejected or breaks a listed rule.
+  (nothing may change) or partial (the permitted part is done, the forbidden part refused). A
+  partial scenario needs at least two non-inform intents: one performed, one refused. Confirm
+  with sandbox_execute that the forbidden request is rejected or breaks a listed rule, or that it
+  concerns an entity of another user.
 - conditional: set conditions={collection,where,holds,if_true,if_false}. where is the condition
   as [[field,op,value]] clauses over the collection, holds says whether it is true in the
-  initial data (check with query_data), if_true and if_false are the two branch tool names.
+  initial data (check with query_data), if_true and if_false are the two branch tool names:
+  write actions that are also intents of the scenario.
 - underspecified: set ambiguity={collection,initial_where,clarified_where}: the user's first
   description matches several records and, once the user clarifies when asked, exactly one.
 - reasoning: the user's goal needs a comparison or computation over real data, for example
@@ -90,6 +94,9 @@ def validate_scenario(parent: Scenario, stressor: Stressor, scenario: Scenario, 
         raise ValueError("underspecified needs ambiguity={collection,initial_where,clarified_where}")
     if stressor == Stressor.REASONING and not any((i.notes or "").strip() for i in scenario.intents):
         raise ValueError("reasoning needs the required comparison or computation in an intent's notes")
+    problem = infeasible(scenario)
+    if problem:
+        raise ValueError(f"this scenario can never be grounded: {problem}")
 
 
 class EvolverAgent:
@@ -98,13 +105,22 @@ class EvolverAgent:
         self.toolbox = ExplorerAgent(llm, holdout_path)
         self.trace = []
 
-    def run(self, parent_row: dict, parent: Scenario, stressor: Stressor, scenario_id: str, gaps: dict, max_turns=12) -> Scenario:
+    def run(self, parent_row: dict, parent: Scenario, stressor: Stressor, scenario_id: str, gaps: dict, max_turns=12,
+            revision=None) -> Scenario:
+        """``revision={scenario, diagnosis}``: an earlier scenario for this slot that was not admitted."""
         metadata = self.toolbox.metadata
         meta = {k: v for k, v in parent_row["meta"].items() if k != "verifier_report"}
         payload = dict(parent=dict(task=parent_row["task"], meta=meta, scenario=parent.model_dump(mode="json")),
             stressor=stressor.value, domain=metadata["domain"], atomic_actions=self.knowledge["atomic_actions"],
             tools=metadata["tools"], policy=metadata["policy"], gaps=gaps,
             rules=[{k: r[k] for k in ("rule_id", "tools", "text", "check")} for r in self.knowledge["rules"]])
+        if revision:
+            # [BLOG] "Tasks that fail are not thrown away. They are diagnosed and reworked until they
+            # pass." [INDEPENDENT] Rework of the grounding could not fix it, so the scenario itself is redone.
+            payload["revision"] = dict(revision, instruction=(
+                "Your earlier scenario for this parent and stressor could not be admitted, even after the "
+                "Initializer reworked its grounding; the diagnosis says why. Submit a different scenario "
+                "that removes the cause. Keep the same parent and stressor."))
         messages = [dict(role="system", content=build_system(metadata)), dict(role="user", content=json.dumps(payload))]
         self.trace = []
         for turn in range(max_turns):

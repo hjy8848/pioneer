@@ -72,3 +72,50 @@ def run_rounds(scenario, candidate_id, *, knowledge, params, verifier_cfg, seed_
             if type(exc).__name__ in FATAL:
                 raise
     return None, previous, diagnosis
+
+
+def compact_diagnosis(diagnosis, limit=3000):
+    """What the Evolver needs from a failed round: the error or failed checks, not transcripts."""
+    if not diagnosis:
+        return None
+    if "error" in diagnosis:
+        failures = ((diagnosis.get("last_tool_result") or {}).get("failures") if isinstance(
+            diagnosis.get("last_tool_result"), dict) else None) or []
+        out = dict(error=diagnosis["error"], failed_checks=[
+            dict(name=f.get("name"), details=json.dumps(f.get("details"), default=str)[:600]) for f in failures])
+    else:
+        out = dict(failure_codes=diagnosis.get("failure_codes"), failed_checks=[
+            dict(name=c["name"], details=json.dumps({k: v for k, v in (c.get("details") or {}).items()
+                                                      if k not in ("trials", "replay")}, default=str)[:600])
+            for c in diagnosis.get("checks", []) if not c.get("passed")])
+    text = json.dumps(out, default=str)
+    return out if len(text) <= limit else dict(summary=text[:limit])
+
+
+def run_with_rewrites(scenario, candidate_id, *, revise, rewrites, append, start_round=0,
+                      previous=None, diagnosis=None, **round_options):
+    """[INDEPENDENT] Rounds of grounding rework; when they end without admission, the Evolver
+    rewrites the scenario from the diagnosis (``revise(scenario, diagnosis) -> Scenario``), at most
+    ``rewrites`` times. Returns (accepted_record | None, previous, diagnosis, final scenario)."""
+    from pioneer.initializer.contract import scenario_key
+    last = [start_round - 1]
+
+    def counted(record):
+        last[0] = max(last[0], record["round"])
+        append(record)
+
+    for attempt in range(rewrites + 1):
+        record, previous, diagnosis = run_rounds(scenario, candidate_id, append=counted, start_round=last[0] + 1,
+            previous=previous, diagnosis=diagnosis, atomic_action=scenario_key(scenario), **round_options)
+        if record is not None or attempt == rewrites:
+            return record, previous, diagnosis, scenario
+        print(f"{candidate_id} scenario not admitted; Evolver rewrite {attempt + 1}/{rewrites}", flush=True)
+        try:
+            scenario = revise(scenario, compact_diagnosis(diagnosis))
+        except Exception as exc:
+            if type(exc).__name__ in FATAL:
+                raise
+            print(f"{candidate_id} Evolver rewrite failed ({type(exc).__name__}: {exc}); queueing", flush=True)
+            return None, previous, diagnosis, scenario
+        previous = diagnosis = None  # a new scenario starts its grounding from scratch
+    return record, previous, diagnosis, scenario

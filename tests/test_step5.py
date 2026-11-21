@@ -125,6 +125,24 @@ def test_scenario_shape_per_stressor(stressor, child, ok):
             validate_scenario(PARENT, stressor, child, ATOMS, 4)
 
 
+@pytest.mark.parametrize("stressor,child,problem", [
+    # the batch's dead end: partial with a single write intent has no non-empty strict subset to perform
+    (Stressor.POLICY_PUSHBACK, scenario("inform: user details", "cancel_pending_order", outcome=ExpectedOutcome.PARTIAL),
+     "at least two non-inform intents"),
+    (Stressor.POLICY_PUSHBACK, scenario("inform: user details", outcome=ExpectedOutcome.REFUSE),
+     "refuse needs a non-inform intent"),
+    (Stressor.CONDITIONAL, scenario("cancel_pending_order", "inform: order details", conditions=dict(
+        collection="orders", where=[], holds=True, if_true="cancel_pending_order", if_false="inform: order details")),
+     "must be a write action"),
+])
+def test_scenario_that_can_never_be_grounded_is_returned_to_the_evolver(stressor, child, problem):
+    child = child.model_copy(update=dict(rationale="why", depth=1))
+    with pytest.raises(ValueError, match=problem):
+        validate_scenario(PARENT, stressor, child, ATOMS, 4)
+    ok = scenario("cancel_pending_order", "modify_user_address", outcome=ExpectedOutcome.PARTIAL)
+    validate_scenario(PARENT, Stressor.POLICY_PUSHBACK, ok.model_copy(update=dict(rationale="why", depth=1)), ATOMS, 4)
+
+
 def test_scenario_must_differ_have_rationale_known_actions_and_depth_room():
     chained = scenario("cancel_pending_order", "modify_user_address", rationale="r")
     with pytest.raises(ValueError, match="equals its parent"):
@@ -436,6 +454,42 @@ def test_run_rounds_returns_the_unfixed_task_for_the_rework_queue(monkeypatch):
     stub_pipeline(monkeypatch, ["reject", "reject"])
     (record, previous, diagnosis), written = run_pipeline(rounds=2)
     assert record is None and len(written) == 2 and previous["task"]["id"] and diagnosis == {"passed": False}
+
+
+def test_evolver_rewrites_a_scenario_the_rounds_could_not_fix(monkeypatch):
+    stub_pipeline(monkeypatch, ["reject", "reject", "admit"])  # same proposal twice ends the rounds of version 1
+    first = scenario("cancel_pending_order")
+    second = scenario("cancel_pending_order", "modify_user_address")
+    revisions, written = [], []
+
+    def revise(old, diagnosis):
+        revisions.append((old, diagnosis))
+        return second
+
+    record, previous, diagnosis, final = pipeline.run_with_rewrites(
+        first, "cid", revise=revise, rewrites=2, knowledge={}, params=dict(seed=0), verifier_cfg=dict(e2e_trials=1),
+        seed_instances=(), append=written.append, ledger_factory=lambda: None, rounds=5)
+    assert record["passed"] and final is second and len(revisions) == 1
+    assert revisions[0][0] is first and revisions[0][1]["failed_checks"] == []  # compacted report, no transcripts
+    assert [w["round"] for w in written] == [0, 1, 2]  # round numbers continue across versions
+    assert written[-1]["atomic_action"] == "cancel_pending_order|modify_user_address@complete"
+
+
+def test_rewrites_stop_at_the_budget_and_a_failed_rewrite_queues(monkeypatch):
+    stub_pipeline(monkeypatch, ["reject"] * 10)
+    calls = []
+    record, *_ = pipeline.run_with_rewrites(
+        scenario("cancel_pending_order"), "cid", revise=lambda s, d: calls.append(1) or s, rewrites=1,
+        knowledge={}, params=dict(seed=0), verifier_cfg=dict(e2e_trials=1), seed_instances=(),
+        append=lambda r: None, ledger_factory=lambda: None, rounds=5)
+    assert record is None and len(calls) == 1
+
+    def broken(s, d):
+        raise RuntimeError("Evolver did not submit")
+    record, *_ = pipeline.run_with_rewrites(
+        scenario("cancel_pending_order"), "cid", revise=broken, rewrites=2, knowledge={}, params=dict(seed=0),
+        verifier_cfg=dict(e2e_trials=1), seed_instances=(), append=lambda r: None, ledger_factory=lambda: None, rounds=5)
+    assert record is None
 
 
 @pytest.mark.parametrize("step", ["reject", "error"])

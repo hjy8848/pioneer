@@ -30,6 +30,7 @@ evolution:
 
 rework:
   rounds_per_batch: 5       # [INDEPENDENT] budget; unrepaired tasks go to rework_queue, not dropped
+  scenario_rewrites: 2      # [INDEPENDENT] then the Evolver redoes the scenario from the diagnosis, each with its own rounds
 
 diversity:                   # [INDEPENDENT] PLAN Step 4.5 item 3
   max_tasks_per_user: 2      # per batch; the same (atomic action, entity) pair is never reused

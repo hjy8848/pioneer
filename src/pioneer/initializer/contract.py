@@ -25,6 +25,30 @@ def scenario_key(scenario: Scenario) -> str:
     return "|".join(i.atomic_action for i in scenario.intents) + "@" + scenario.expected_outcome.value
 
 
+def infeasible(scenario: Scenario):
+    """Why no reference actions could ever satisfy ``check_actions`` (or E5) for this scenario, else None.
+
+    [INDEPENDENT] Checked when the Evolver submits, so a scenario that cannot be grounded
+    goes back to the Evolver instead of using up the Initializer's budget.
+    """
+    if scenario.depth == 0:
+        return None
+    tools, outcome = intent_tools(scenario), scenario.expected_outcome
+    if outcome == ExpectedOutcome.PARTIAL and len(tools) < 2:
+        return (f"partial needs at least two non-inform intents (one the agent performs, one it must refuse); "
+                f"the scenario has {tools}")
+    if outcome == ExpectedOutcome.REFUSE and not tools:
+        return "refuse needs a non-inform intent: the action the user asks for that the agent must refuse"
+    if scenario.conditions and outcome not in (ExpectedOutcome.REFUSE, ExpectedOutcome.INFORM,
+                                               ExpectedOutcome.PARTIAL, ExpectedOutcome.TRANSFER):
+        branches = [scenario.conditions.get("if_true"), scenario.conditions.get("if_false")]
+        if any(b and is_inform(b) for b in branches):
+            return "each conditional branch must be a write action: the branch the data selects becomes the reference"
+        if any(b and b not in tools for b in branches):
+            return f"both branch actions {branches} must also be intents of the scenario"
+    return None
+
+
 def check_actions(scenario: Scenario, actual: list[str]) -> None:
     """Raise ValueError when the reference action names do not fit the scenario."""
     if scenario.depth == 0:

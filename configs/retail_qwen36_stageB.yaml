@@ -1,0 +1,53 @@
+# Stage B2 test: same as retail_qwen36_local.yaml except small depth targets, so a second generation
+# grows from the first one's tasks instead of filling depth 1 toward 200.
+# Same as retail.yaml except the shared model: Qwen3.6-35B-A3B served by our own vLLM on npu30001
+# (4 replicas x TP=2, BF16, max_model_len 131072). Set LITELLM_API_BASE to the comma-separated
+# replica URLs (requests rotate over them) and LITELLM_API_KEY to any non-empty value.
+domain: retail
+seed: 0
+
+tau2:
+  tag: v1.0.1
+  commit: fc0055dc4e0a316c3f83133267fbd6faaa770992
+
+llm:
+  # One backbone for all synthesis roles, as in the blog (model is our choice; blog's is unnamed).
+  model: openai/qwen3.6-35b-a3b  # vLLM --served-model-name
+  # Thinking per role. With thinking off everywhere (evolve_q36_nothink_11210211) the Initializer
+  # misused query_data, one call rambled to the 16000-token cap without a tool call, and the round
+  # overflowed the context. Roles that only follow a script or write a diagnosis stay off.
+  enable_thinking: {default: true, verifier: false, user_simulator: false}
+  temperature: 0.0
+  max_tokens: 8192          # thinking counts toward it; caps a rambling turn at ~2 min instead of ~3.5
+  timeout: 600
+  cache_dir: data/cache/llm
+
+user_simulator:
+  model: same_as_llm        # [BLOG] one frontier model for all LLM roles, incl. user simulator
+  temperature: 0.0
+
+evolution:
+  max_depth: 4
+  depth_targets: [40, 6, 6, 6, 6]        # B2 only: small layers, see header
+  max_children_per_parent: 3              # per generation
+  max_tasks_per_user: 8      # a family of descendants shares its parent's user, so the depth-0 limit of 2 does not apply
+  generations: 5
+  candidates_per_generation: 20
+  depth0_per_atomic_action: 3
+  stressors: [chain, multi_entity, policy_pushback, conditional, underspecified, reasoning]
+
+rework:
+  rounds_per_batch: 5       # [INDEPENDENT] budget; unrepaired tasks go to rework_queue, not dropped
+  scenario_rewrites: 2      # [INDEPENDENT] then the Evolver redoes the scenario from the diagnosis, each with its own rounds
+
+diversity:                   # [INDEPENDENT] PLAN Step 4.5 item 3
+  max_tasks_per_user: 2      # per batch; the same (atomic action, entity) pair is never reused
+  pool_size: 20              # seeded sample of eligible unused entities handed to the Initializer
+
+verifier:
+  e2e_reachability: true    # E8, required (PLAN Step 3)
+  e2e_trials: 2
+
+reward_basis_allowed: [[DB], [DB, COMMUNICATE]]
+checkpoint_verified_tasks: 50    # PLAN Step 6: pause for human review here
+target_verified_tasks: 600       # [BLOG] "roughly 600 verified tasks per domain"

@@ -1,5 +1,5 @@
 # Same as retail.yaml except the shared model: Qwen3.6-35B-A3B served by our own vLLM on npu30001
-# (4 replicas x TP=2, BF16, max_model_len 65536). Set LITELLM_API_BASE to the comma-separated
+# (4 replicas x TP=2, BF16, max_model_len 131072). Set LITELLM_API_BASE to the comma-separated
 # replica URLs (requests rotate over them) and LITELLM_API_KEY to any non-empty value.
 domain: retail
 seed: 0
@@ -16,7 +16,7 @@ llm:
   # overflowed the context. Roles that only follow a script or write a diagnosis stay off.
   enable_thinking: {default: true, verifier: false, user_simulator: false}
   temperature: 0.0
-  max_tokens: 4096          # one reply never needs more; caps a rambling turn at ~1 min instead of ~3.5
+  max_tokens: 8192          # thinking counts toward it; caps a rambling turn at ~2 min instead of ~3.5
   timeout: 600
   cache_dir: data/cache/llm
 

@@ -1,6 +1,8 @@
 """[INDEPENDENT] JSON LLM boundary with disk caching and usage accounting."""
 import hashlib
+import itertools
 import json
+import threading
 import time
 from copy import deepcopy
 from pathlib import Path
@@ -18,15 +20,22 @@ class LiteLLMClient:
         self.timeout = timeout  # per-request seconds; deliberately not part of the cache key
         self.retries, self.backoff = retries, backoff  # waits backoff, 2*backoff, ... (capped at 300 s)
         self.cache_dir = Path(cache_dir)
+        # [INDEPENDENT] A comma-separated api_base lists replicas of one served model; requests
+        # rotate over them. The cache key keeps the whole list, so a cached answer is found no
+        # matter which replica produced it.
         self.api_base, self.api_key = api_base, api_key
+        self._bases = itertools.cycle([b.strip() for b in api_base.split(",")]) if api_base else None
+        self._lock = threading.Lock()
         self.records = []
         self.usage = dict(calls=0, cache_hits=0, prompt_tokens=0, completion_tokens=0,
                           cost_usd=0.0, unknown_cost_calls=0)
 
     def _completion(self, litellm, request):
         for attempt in range(self.retries + 1):
+            with self._lock:
+                base = next(self._bases) if self._bases else None
             try:
-                return litellm.completion(**request, api_base=self.api_base, api_key=self.api_key,
+                return litellm.completion(**request, api_base=base, api_key=self.api_key,
                                           timeout=self.timeout, num_retries=0)
             except Exception as exc:
                 if type(exc).__name__ not in TRANSIENT or attempt == self.retries:

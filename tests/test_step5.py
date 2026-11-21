@@ -303,6 +303,28 @@ def test_client_retries_gateway_hiccups_but_not_other_errors(tmp_path, monkeypat
         LiteLLMClient("m", 0, 0, tmp_path, retries=2, backoff=1).chat([{"role": "user", "content": "third"}])
 
 
+def test_client_rotates_over_replicas_and_caches_independently_of_replica(tmp_path, monkeypatch):
+    import litellm
+    from types import SimpleNamespace
+    from pioneer.llm import LiteLLMClient
+
+    bases = []
+
+    def completion(**kwargs):
+        bases.append(kwargs["api_base"])
+        return SimpleNamespace(usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, model_dump=lambda: {}),
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok", model_dump=lambda exclude_none=True: {"content": "ok"}))],
+            _hidden_params={"response_cost": 0.0})
+
+    monkeypatch.setattr(litellm, "completion", completion)
+    client = LiteLLMClient("m", 0, 0, tmp_path, api_base="http://a/v1, http://b/v1")
+    for text in ("1", "2", "3"):
+        client.chat([{"role": "user", "content": text}])
+    assert bases == ["http://a/v1", "http://b/v1", "http://a/v1"]
+    client.chat([{"role": "user", "content": "2"}])  # answered by b, found in the cache now
+    assert len(bases) == 3 and client.usage["cache_hits"] == 1
+
+
 # -- pipeline control flow ------------------------------------------------------------------------
 class FakeClient:
     def __init__(self, **params):

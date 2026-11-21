@@ -79,7 +79,7 @@ Step 4.5 `[INDEPENDENT]`（博客没写，为让流水线跑通而补）：
 
 Step 3.5 `[INDEPENDENT]`：结构签名用于覆盖统计，不拒绝同结构的新实例；实例签名使用 actions 名称/参数、initial_state、stressor 集合、expected_outcome、communicate_info，排除剧本文字。Initializer 必须在 task_instructions 中包含等待操作完成后才结束的固定句，防止重现提前 STOP；没有采用额外 ART checklist。
 
-Step 3 `[INDEPENDENT]`：参数证据用原文/READ 输出表达式表示，身份匹配必须唯一，E4 是保守的可导出性近似；E6 验证候选声明的初始/澄清筛选，不能声称解决任意自然语言语义验证。拒绝请求可声明 after_actions 前缀。E9 内容签名不依赖调用者提供的签名字符串，实例签名忽略 action_id 和剧本文字，包含 stressor 集合（Step 3.5 修正）；任务池已见签名由后续流水线传入。作用域内生成适配只支持单进程顺序的原生对话。
+Step 3 `[INDEPENDENT]`：参数证据用原文/READ 输出表达式表示，身份匹配必须唯一，E4 是保守的可导出性近似；E6 验证候选声明的初始/澄清筛选，不能声称解决任意自然语言语义验证。拒绝请求可声明 after_actions 前缀。E9 内容签名不依赖调用者提供的签名字符串，实例签名忽略 action_id 和剧本文字，包含 stressor 集合（Step 3.5 修正）；任务池已见签名由后续流水线传入。作用域内生成适配只支持单进程顺序的原生对话。E5 与 E2 一样承认 `policy:one_authenticated_user`：拒绝请求所动实体在 DB 中的所有者不是指令唯一认证的用户时，算环境证据成立（`[OFFICIAL]` policy「must deny any requests for tasks related to any other user」，工具本身不检查归属）；此前 Evolver 出的跨用户拒绝题因工具接受调用而永远过不了 E5。返工时若某轮的上一版提案与诊断（去掉轮次号）与上一轮相同，则停止返工并进 rework_queue，因为固定 seed 与磁盘缓存会让它原样重放。
 
 Step 2.5 `[INDEPENDENT]`：按原文段落与规则 policy_quote 做映射，未覆盖段落交给同一 Explorer agent 补探索。覆盖率 25%→33.3%，新增 5 条工具确认规则。分母包括标题和说明段，且一段可能有多个约束，因此该数字既不是“可执行规则召回率”，也不是 policy 完整性证明；未覆盖及未进一步确认的内容仍显式保留。生产包不再导出或引用模板编译器；网关地址由进程环境注入，轨迹与主 world model 分离。
 

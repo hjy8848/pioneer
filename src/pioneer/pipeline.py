@@ -7,6 +7,8 @@ fixed is returned to the caller for the rework queue, never dropped.
 Shared by the Evolver driver. Each round builds a fresh client so generation and
 validation spend can be told apart, exactly as scripts/initialize.py records it.
 """
+import json
+
 from pioneer.initializer import InitializerAgent
 from pioneer.llm import LiteLLMClient
 from pioneer.paths import HOLDOUT_DIR
@@ -22,7 +24,18 @@ def run_rounds(scenario, candidate_id, *, knowledge, params, verifier_cfg, seed_
                previous=None, diagnosis=None, atomic_action=None):
     """Run up to ``rounds`` attempts. Returns (accepted_record | None, previous, diagnosis)."""
     seen = set(seed_instances)
+    last_inputs = None
     for round_no in range(start_round, start_round + rounds):
+        # [INDEPENDENT] A round fed the same proposal and diagnosis as the last one replays it (seeded
+        # generation, disk cache), so the budget would be spent on copies: stop and queue the scenario.
+        same = previous
+        if isinstance(previous, dict) and isinstance(previous.get("meta"), dict):  # the round number itself
+            same = dict(previous, meta={k: v for k, v in previous["meta"].items() if k != "repair_rounds"})
+        inputs = json.dumps([same, diagnosis], sort_keys=True, default=str)
+        if inputs == last_inputs:
+            print(f"{candidate_id} round={round_no} would repeat round {round_no - 1}; stopping rework", flush=True)
+            break
+        last_inputs = inputs
         client = LiteLLMClient(**params)
         initializer = InitializerAgent(client, knowledge, HOLDOUT_DIR / "users.json")
         generation = None

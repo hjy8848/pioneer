@@ -403,3 +403,11 @@ def test_run_rounds_returns_the_unfixed_task_for_the_rework_queue(monkeypatch):
     stub_pipeline(monkeypatch, ["reject", "reject"])
     (record, previous, diagnosis), written = run_pipeline(rounds=2)
     assert record is None and len(written) == 2 and previous["task"]["id"] and diagnosis == {"passed": False}
+
+
+@pytest.mark.parametrize("step", ["reject", "error"])
+def test_run_rounds_stops_when_a_round_would_replay_the_last(monkeypatch, step):
+    stub_pipeline(monkeypatch, [step] * 5)
+    (record, previous, diagnosis), written = run_pipeline(rounds=5)
+    # round 1 sees round 0's output; round 2 would get the same proposal and diagnosis as round 1
+    assert record is None and [w["round"] for w in written] == [0, 1]

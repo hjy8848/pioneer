@@ -132,6 +132,24 @@ def test_other_users_order_is_not_legal_despite_tool_acceptance(knowledge):
     assert FailureCode.POLICY_VIOLATION in report.failure_codes
 
 
+def test_refusing_another_users_order_is_forbidden_by_ownership(knowledge):
+    task, meta, order, user = candidate()
+    env = RetailSynthEnv()
+    env.init()
+    other = env.query_data("orders", [("status", "eq", "pending"), ("user_id", "ne", user["user_id"])], limit=1)[0]
+    meta.expected_outcome = ExpectedOutcome.REFUSE
+    meta.refusal_requests = [dict(tool="cancel_pending_order", arguments=dict(order_id=other["order_id"], reason="no longer needed"))]
+    task.evaluation_criteria.actions = []
+    meta.argument_bindings = {}
+    check = next(c for c in engine(knowledge).evaluate(task, meta, run_e8=False).checks if c.name == "E5")
+    request = check.details["requests"][0]
+    assert check.passed and request["execution"]["ok"]  # the tool accepts it; ownership forbids it
+    assert request["failed_rules"] == ["policy:one_authenticated_user"]
+    meta.refusal_requests[0]["arguments"]["order_id"] = order["order_id"]  # the user's own order: not forbidden
+    check = next(c for c in engine(knowledge).evaluate(task, meta, run_e8=False).checks if c.name == "E5")
+    assert not check.passed
+
+
 def test_policy_only_rule_rejects_an_executable_write(knowledge):
     from tau2.data_model.tasks import InitialState, InitializationData
     from helpers.verifier_cases import text

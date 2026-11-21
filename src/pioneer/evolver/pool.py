@@ -15,16 +15,31 @@ def read_rows(path: Path) -> list[dict]:
 
 
 def load_pool(paths) -> list[dict]:
-    """Admitted rows from the given jsonl files, first occurrence of an instance wins."""
-    seen, pool = set(), []
+    """Admitted rows from the given jsonl files, first occurrence of an instance wins.
+
+    Runs before run-tagged candidate ids could reuse an id (every run started at
+    ``evo:g1:s0``). A later, different task with a taken id is kept under
+    ``<id>@<run folder>`` with a warning instead of being dropped as a duplicate; the
+    first one keeps the id, which is the one its children's ``parent_id`` refers to.
+    """
+    seen, ids, pool = set(), set(), []
     for path in paths:
         for row in read_rows(path):
             if not row.get("passed", True) or "task" not in row or "meta" not in row:
                 continue
             signature = row["meta"]["instance_signature"]
-            if signature not in seen:
-                seen.add(signature)
-                pool.append(row)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            task_id = row["task"]["id"]
+            if task_id in ids:
+                run = Path(path).resolve().parent.parent.parent.name  # <run>/shards/<cid>/candidates.jsonl
+                renamed = f"{task_id}@{run}"
+                print(f"warning: task id {task_id} already used by another task; keeping {path} as {renamed}")
+                row = dict(row, task=dict(row["task"], id=renamed))
+                task_id = renamed
+            ids.add(task_id)
+            pool.append(row)
     return pool
 
 

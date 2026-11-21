@@ -23,9 +23,17 @@ def pair_key(a: str, b: str) -> str:
     return "+".join(sorted((a, b)))
 
 
+DEPTH_TARGETS = (40, 200, 200, 120, 40)  # [INDEPENDENT] admitted tasks wanted per depth 0..4 (~600 per domain)
+MAX_CHILDREN_PER_PARENT = 3  # per generation
+
+
 class CoverageTracker:
-    def __init__(self, world: dict, max_depth: int = 4):
+    def __init__(self, world: dict, max_depth: int = 4, depth_targets=None,
+                 max_children_per_parent: int = MAX_CHILDREN_PER_PARENT):
         self.max_depth = max_depth
+        targets = list(depth_targets or DEPTH_TARGETS)
+        self.depth_targets = (targets + targets[-1:] * max_depth)[:max_depth + 1]
+        self.max_children_per_parent = max_children_per_parent
         self.writes = sorted(n for n, t in world["tools"].items() if t.get("tool_type") == "write")
         self.rule_tools = {r["rule_id"]: set(r["tools"]) for r in world["rules"]}
         self.universe = {
@@ -89,29 +97,41 @@ class CoverageTracker:
 
     # -- steering ------------------------------------------------------------------
     def plan(self, n: int, seed) -> list[dict]:
-        """[INDEPENDENT] n (parent, stressor) assignments for one generation.
+        """[INDEPENDENT] Up to n (parent, stressor) assignments for one generation.
 
-        Stressor: refusal outcomes the pool lacks force policy_pushback first, then the
-        least-covered stressor. Parent: from the shallowest uncovered depth's parents
-        when there is one, otherwise any; the one with the fewest children first.
+        Layers fill in order: each slot grows the shallowest depth still short of its
+        target (counting children already planned), from parents one level down. A parent
+        gets at most ``max_children_per_parent`` slots per generation, the one with the
+        fewest children first; when a layer's parents are used up the next layer is tried.
+        (Rushing the first empty depth put a whole generation on its single parent.) Once
+        every target is met, any parent below the maximum depth is used. Stressor:
+        refusal outcomes the pool lacks force policy_pushback first, then the
+        least-covered stressor. Fewer than n slots come back when every parent is capped.
         """
         rng = random.Random(f"{seed}:{len(self.pool)}")
         eligible = [r for r in self.pool if r["meta"]["depth"] < self.max_depth]
-        if not eligible:
-            return []
         missing_refusals = [o for o in sorted(REFUSAL_OUTCOMES) if not self.counts["outcome"][o]]
-        target_depth = next((d for d in range(1, self.max_depth + 1) if not self.counts["depth"][str(d)]), None)
-        shallow = [r for r in eligible if target_depth and r["meta"]["depth"] == target_depth - 1]
-        planned_stressors, planned_children, plan = Counter(), Counter(), []
+        planned_stressors, planned_children, planned_depth, plan = Counter(), Counter(), Counter(), []
+
+        def open_parents(depth=None):
+            return [r for r in eligible if (depth is None or r["meta"]["depth"] == depth)
+                    and planned_children[r["task"]["id"]] < self.max_children_per_parent]
+
         for slot in range(n):
-            if slot < len(missing_refusals):
+            short = [d for d in range(1, self.max_depth + 1)
+                     if self.counts["depth"][str(d)] + planned_depth[d] < self.depth_targets[d]]
+            candidates = next((c for c in (open_parents(d - 1) for d in short) if c), None) or open_parents()
+            if not candidates:
+                break
+            parent = min(candidates, key=lambda r: (
+                self.children[r["task"]["id"]] + planned_children[r["task"]["id"]], rng.random()))
+            if len(plan) < len(missing_refusals):
                 stressor = Stressor.POLICY_PUSHBACK
             else:
                 stressor = min(Stressor, key=lambda s: (self.counts["stressor"][s.value] + planned_stressors[s.value],
                                                         rng.random()))
-            parent = min(shallow or eligible, key=lambda r: (
-                self.children[r["task"]["id"]] + planned_children[r["task"]["id"]], rng.random()))
             planned_stressors[stressor.value] += 1
             planned_children[parent["task"]["id"]] += 1
+            planned_depth[parent["meta"]["depth"] + 1] += 1
             plan.append(dict(slot=slot, parent_id=parent["task"]["id"], stressor=stressor.value))
         return plan

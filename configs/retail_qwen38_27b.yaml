@@ -20,6 +20,8 @@ user_simulator:
 
 evolution:
   max_depth: 4
+  depth_targets: [40, 200, 200, 120, 40]  # [INDEPENDENT] admitted tasks per depth 0..4; layers fill in order
+  max_children_per_parent: 3              # per generation
   max_tasks_per_user: 8      # a family of descendants shares its parent's user, so the depth-0 limit of 2 does not apply
   generations: 5
   candidates_per_generation: 20

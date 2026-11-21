@@ -114,14 +114,20 @@ def driver(args, config):
     generations = args.generations or evolution["generations"]
     per_generation = args.per_generation or evolution["candidates_per_generation"]
     for generation in range(1, generations + 1):
-        tracker = CoverageTracker(world, evolution["max_depth"]).add_all(current_pool(args))
+        pool = current_pool(args)
+        tracker = CoverageTracker(world, evolution["max_depth"], evolution.get("depth_targets"),
+                                  evolution.get("max_children_per_parent", 3)).add_all(pool)
         plan_path = args.out / f"plan_g{generation}.json"
         if plan_path.exists():
             plan = json.loads(plan_path.read_text(encoding="utf-8"))
         else:
+            # Ids carry the run folder: every run restarting at evo:g1:s0 reused ids across runs.
             plan = dict(generation=generation, coverage=tracker.summary(),
-                        assignments=[dict(a, cid=f"evo:g{generation}:s{a['slot']}", gaps=tracker.gaps())
+                        assignments=[dict(a, cid=f"evo:{args.out.name}:g{generation}:s{a['slot']}", gaps=tracker.gaps())
                                      for a in tracker.plan(per_generation, f"{config['seed']}:g{generation}")])
+            taken = {r["task"]["id"] for r in pool} & {a["cid"] for a in plan["assignments"]}
+            if taken:
+                raise SystemExit(f"candidate ids already in the pool: {sorted(taken)}; use a new --out folder")
             plan_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"generation {generation}: pool={plan['coverage']['tasks']} covered={plan['coverage']['covered']}", flush=True)
         if args.plan_only:

@@ -47,14 +47,46 @@ def test_tracker_counts_and_gaps():
     assert t.summary()["tasks"] == 3
 
 
-def test_plan_is_deterministic_forces_pushback_and_prefers_shallow_parents():
+def test_plan_is_deterministic_forces_pushback_and_fills_the_shallowest_short_layer():
     pool = [row("a"), row("b"), row("deep", depth=1, stressors=["chain"], parent="a")]
     t = CoverageTracker(WORLD).add_all(pool)
     plan = t.plan(4, seed=7)
     assert plan == t.plan(4, seed=7)
     assert [p["stressor"] for p in plan[:2]] == ["policy_pushback", "policy_pushback"]  # refuse and partial both missing
-    assert all(p["parent_id"] in {"deep"} for p in plan)  # depth 2 is the first uncovered depth: parents at depth 1
+    assert {p["parent_id"] for p in plan} == {"a", "b"}  # depth 1 is short of its target: parents at depth 0
     assert len({p["stressor"] for p in plan}) >= 3
+
+
+def test_plan_does_not_pile_a_generation_onto_the_one_task_of_a_new_layer():
+    # the batch that collapsed: 28 depth-0 tasks and a single depth-1 task, 20 slots
+    pool = [row(f"d0_{i}") for i in range(28)] + [row("only_d1", depth=1, parent="d0_0")]
+    plan = CoverageTracker(WORLD).add_all(pool).plan(20, seed=0)
+    parents = [p["parent_id"] for p in plan]
+    assert len(plan) == 20 and "only_d1" not in parents and len(set(parents)) == 20
+
+
+def test_pool_keeps_a_later_task_that_reuses_an_id_under_a_run_tagged_id(tmp_path, capsys):
+    from pioneer.evolver import load_pool
+    files = []
+    for run, signature in (("run_a", "sig_a"), ("run_b", "sig_b")):
+        f = tmp_path / run / "shards" / "evo_g1_s0" / "candidates.jsonl"
+        f.parent.mkdir(parents=True)
+        r = row("evo:g1:s0", depth=1, parent="d0")
+        r["meta"]["instance_signature"] = signature
+        f.write_text(json.dumps(r) + "\n", encoding="utf-8")
+        files.append(f)
+    pool = load_pool(files)
+    assert [r["task"]["id"] for r in pool] == ["evo:g1:s0", "evo:g1:s0@run_b"]
+    assert "already used" in capsys.readouterr().out
+
+
+def test_plan_caps_children_per_parent_and_moves_to_the_next_layer():
+    pool = [row("p"), row("c1", depth=1, parent="p")]
+    t = CoverageTracker(WORLD, depth_targets=[1, 2, 5, 5, 5], max_children_per_parent=2).add_all(pool)
+    plan = t.plan(10, seed=0)
+    # depth 1 needs one more (target 2): from p; then depth 2 from c1 (capped at 2); then any open parent
+    assert [p["parent_id"] for p in plan][:1] == ["p"]
+    assert sorted(p["parent_id"] for p in plan) == ["c1", "c1", "p", "p"]  # everyone capped at 2: only 4 slots
 
 
 def test_plan_never_evolves_past_the_maximum_depth_and_spreads_children():

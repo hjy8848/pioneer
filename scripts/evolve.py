@@ -2,7 +2,7 @@
 
   # what would the next generation work on (no model calls)
   python scripts/evolve.py --out data/runs/evolve1 --pool data/runs/depth0_partial.jsonl "data/runs/depth0_rest/shards/*/candidates.jsonl" --plan-only
-  # run it: 2 generations of 10 candidates, 4 isolated worker processes
+  # run it: 2 generations of 10 candidates, 4 isolated worker processes (up to 64 on a self-hosted model)
   python scripts/evolve.py --out data/runs/evolve1 --pool ... --generations 2 --per-generation 10 --workers 4
 
 Each candidate is Evolver agent -> Initializer -> Verifier -> rework (src/pioneer/pipeline.py). One
@@ -177,8 +177,10 @@ def main():
     parser.add_argument("--worker", help="(internal) assignment json to run in this process")
     parser.add_argument("--config", type=Path, default=Path("configs/retail.yaml"))
     args = parser.parse_args()
-    if not 1 <= args.workers <= 4:
-        raise ValueError("workers must be 1..4")
+    # Each worker runs one candidate's agents one call at a time, so the cap is how many calls are in
+    # flight at once: 4 suits the shared gateway, a self-hosted vLLM takes 30 or more.
+    if not 1 <= args.workers <= 64:
+        raise ValueError("workers must be 1..64")
     os.environ.setdefault("TAU2_DATA_DIR", str(TAU2_DATA_DIR))
     os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     config = yaml.safe_load((REPO_ROOT / args.config).read_text(encoding="utf-8"))

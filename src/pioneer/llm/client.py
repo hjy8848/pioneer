@@ -15,8 +15,12 @@ TRANSIENT = {"InternalServerError", "APIConnectionError", "ServiceUnavailableErr
 
 class LiteLLMClient:
     def __init__(self, model, temperature, seed, cache_dir, *, api_base=None, api_key=None, max_tokens=16000,
-                 timeout=120, retries=4, backoff=30):
+                 timeout=120, retries=4, backoff=30, enable_thinking=None):
         self.params = dict(model=model, temperature=temperature, seed=seed, max_tokens=max_tokens)
+        if enable_thinking is not None:
+            # [INDEPENDENT] Qwen3.5+ chat-template switch, sent to vLLM for every role. Part of the
+            # request, hence of the cache key; left out when unset so existing cache keys still match.
+            self.params["extra_body"] = {"chat_template_kwargs": {"enable_thinking": bool(enable_thinking)}}
         self.timeout = timeout  # per-request seconds; deliberately not part of the cache key
         self.retries, self.backoff = retries, backoff  # waits backoff, 2*backoff, ... (capped at 300 s)
         self.cache_dir = Path(cache_dir)

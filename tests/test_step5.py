@@ -325,6 +325,26 @@ def test_client_rotates_over_replicas_and_caches_independently_of_replica(tmp_pa
     assert len(bases) == 3 and client.usage["cache_hits"] == 1
 
 
+def test_thinking_switch_is_sent_and_keys_the_cache(tmp_path, monkeypatch):
+    import litellm
+    from types import SimpleNamespace
+    from pioneer.llm import LiteLLMClient
+
+    sent = []
+
+    def completion(**kwargs):
+        sent.append(kwargs.get("extra_body"))
+        return SimpleNamespace(usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, model_dump=lambda: {}),
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok", model_dump=lambda exclude_none=True: {"content": "ok"}))],
+            _hidden_params={"response_cost": 0.0})
+
+    monkeypatch.setattr(litellm, "completion", completion)
+    messages = [{"role": "user", "content": "hi"}]
+    LiteLLMClient("m", 0, 0, tmp_path).chat(messages)
+    LiteLLMClient("m", 0, 0, tmp_path, enable_thinking=False).chat(messages)  # a different request: not a cache hit
+    assert sent == [None, {"chat_template_kwargs": {"enable_thinking": False}}]
+
+
 # -- pipeline control flow ------------------------------------------------------------------------
 class FakeClient:
     def __init__(self, **params):

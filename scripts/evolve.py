@@ -137,7 +137,7 @@ def driver(args, config):
                 file.write_text(json.dumps(assignment, ensure_ascii=False), encoding="utf-8")
                 log = (folder / "run.log").open("a", encoding="utf-8")
                 command = [sys.executable, str(SCRIPT), "--out", str(args.out.resolve()), "--worker", str(file.resolve()),
-                           "--pool", *[str(p) for p in args.pool]]
+                           "--config", str(args.config), "--pool", *[str(p) for p in args.pool]]
                 process = subprocess.Popen(command, cwd=REPO_ROOT, stdout=log, stderr=subprocess.STDOUT,
                                            creationflags=0x08000000 if os.name == "nt" else 0)
                 active.append((assignment["cid"], process, log))
@@ -159,6 +159,7 @@ def driver(args, config):
     tracker = CoverageTracker(world, evolution["max_depth"]).add_all(current_pool(args))
     summary = summarize_ledger(rows)
     summary["coverage"] = tracker.summary()
+    summary["model"], summary["config"] = config["llm"]["model"], str(args.config)
     summary["rework_queue"] = sum(len(json.loads(f.read_text(encoding="utf-8")))
                                   for f in (args.out / "shards").glob("*/rework_queue.json"))
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -174,12 +175,13 @@ def main():
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--plan-only", action="store_true")
     parser.add_argument("--worker", help="(internal) assignment json to run in this process")
+    parser.add_argument("--config", type=Path, default=Path("configs/retail.yaml"))
     args = parser.parse_args()
     if not 1 <= args.workers <= 4:
         raise ValueError("workers must be 1..4")
     os.environ.setdefault("TAU2_DATA_DIR", str(TAU2_DATA_DIR))
     os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-    config = yaml.safe_load((REPO_ROOT / "configs/retail.yaml").read_text(encoding="utf-8"))
+    config = yaml.safe_load((REPO_ROOT / args.config).read_text(encoding="utf-8"))
     (worker if args.worker else driver)(args, config)
 
 
